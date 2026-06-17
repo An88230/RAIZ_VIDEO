@@ -40,9 +40,24 @@ Completed scope:
 - Invalid transitions return `409 conflict`.
 - Unknown jobs return `404`.
 
+## Phase 4: Render Preparation
+
+Goal: convert a saved RAIZ job into a deterministic render plan before calling any render engine.
+
+Completed scope:
+
+- `prepareRenderPlan(job)` creates a 1080x1920 plan for Arabic 9:16 jobs.
+- `POST /jobs/:id/prepare` reads `storage/jobs/{job_id}/job.json`.
+- Preparation requires current status `queued`.
+- Preparation writes `storage/jobs/{job_id}/render-plan.json`.
+- Preparation creates `storage/jobs/{job_id}/output/.gitkeep`.
+- Preparation moves status from `queued` to `preparing`.
+- Preparation appends `job.render_plan_created` to `events.ndjson`.
+- Preparation does not call a render adapter and does not generate video.
+
 One clear next task:
 
-Add internal preparation steps that move jobs from `queued` to `preparing` without calling a render engine.
+Add asset and voice preflight checks inside the preparation layer without rendering.
 
 ## Later Phases
 

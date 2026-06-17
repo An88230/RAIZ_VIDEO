@@ -91,6 +91,43 @@ storage/jobs/smoke-arabic-001/status.json
 
 Unknown jobs return `404`.
 
+## Prepare Render Plan
+
+Phase 4 converts the saved RAIZ job into a deterministic render plan. It still does not render video and does not call `short-video-maker`.
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/prepare
+```
+
+This requires the job to be `queued`. It creates:
+
+```text
+storage/jobs/smoke-arabic-001/render-plan.json
+storage/jobs/smoke-arabic-001/output/.gitkeep
+```
+
+It also moves the job to `preparing` and adds metadata to `status.json`:
+
+```json
+{
+  "metadata": {
+    "render_plan_path": "storage/jobs/smoke-arabic-001/render-plan.json",
+    "output_dir": "storage/jobs/smoke-arabic-001/output"
+  }
+}
+```
+
+The event log receives:
+
+```text
+job.status_changed
+job.render_plan_created
+```
+
+Calling prepare again returns `409 conflict`. Unknown jobs return `404`.
+
 ## Update Status Manually
 
 Phase 3 adds controlled lifecycle transitions for internal testing before real rendering.
