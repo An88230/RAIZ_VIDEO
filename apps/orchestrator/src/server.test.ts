@@ -7,9 +7,10 @@ import { createServer } from "./server.js";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const samplePath = resolve(currentDir, "../../../samples/valid-arabic-9x16-job.json");
+const shortVideoMakerVendorPath = resolve(currentDir, "../../../vendor/short-video-maker");
 const sampleJob = JSON.parse(readFileSync(samplePath, "utf8")) as Record<string, unknown>;
 const storageRoot = mkdtempSync(resolve(tmpdir(), "raiz-orchestrator-test-"));
-const server = createServer({ storageRoot });
+const server = createServer({ storageRoot, shortVideoMakerVendorPath });
 
 interface ArtifactInventoryBody {
   artifacts?: Array<{ name?: string; type?: string; exists?: boolean }>;
@@ -23,6 +24,13 @@ interface ArtifactInventoryBody {
     has_short_video_maker_payload?: boolean;
     has_output?: boolean;
   };
+}
+
+interface ReadinessReviewBody {
+  ready_for_dry_run?: boolean;
+  status?: string;
+  checks?: Array<{ name?: string; passed?: boolean; severity?: string }>;
+  errors?: string[];
 }
 
 const validateResponse = await server.inject({
@@ -499,6 +507,19 @@ if (
   throw new Error("Expected preflight to keep status preparing and update status metadata.");
 }
 
+const prepareJobAdapterHealthResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/adapter-health"
+});
+
+if (prepareJobAdapterHealthResponse.statusCode !== 200) {
+  throw new Error(`Expected adapter health report before readiness, got ${prepareJobAdapterHealthResponse.statusCode}.`);
+}
+
+if (!existsSync(resolve(prepareJobDir, "adapter-health.short-video-maker.json"))) {
+  throw new Error("Expected adapter health report to exist before readiness.");
+}
+
 const adapterPayloadResponse = await server.inject({
   method: "POST",
   url: "/jobs/smoke-arabic-prepare-001/adapter-payload/short-video-maker"
@@ -597,6 +618,62 @@ if (
   )
 ) {
   throw new Error("Expected adapter payload creation to append job.adapter_payload_created event.");
+}
+
+const readinessResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/readiness-review"
+});
+
+if (readinessResponse.statusCode !== 200) {
+  throw new Error(`Expected readiness review to pass after all required artifacts, got ${readinessResponse.statusCode}.`);
+}
+
+const readinessReview = JSON.parse(readinessResponse.body) as ReadinessReviewBody;
+
+if (
+  readinessReview.status !== "passed" ||
+  readinessReview.ready_for_dry_run !== true ||
+  !readinessReview.checks?.some((check) => check.name === "payload_direction" && check.passed)
+) {
+  throw new Error("Expected readiness review to pass and mark job ready for dry run.");
+}
+
+const readinessReviewPath = resolve(prepareJobDir, "readiness-review.json");
+
+if (!existsSync(readinessReviewPath)) {
+  throw new Error("Expected readiness review to create readiness-review.json.");
+}
+
+const readinessStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/status"
+});
+const readinessStatus = JSON.parse(readinessStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    readiness_review_path?: string;
+    readiness_status?: string;
+    ready_for_dry_run?: boolean;
+  };
+};
+
+if (
+  readinessStatus.status !== "preparing" ||
+  readinessStatus.metadata?.readiness_review_path !== readinessReviewPath ||
+  readinessStatus.metadata.readiness_status !== "passed" ||
+  readinessStatus.metadata.ready_for_dry_run !== true
+) {
+  throw new Error("Expected readiness review to keep status preparing and update readiness metadata.");
+}
+
+const readinessEvents = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!readinessEvents.some((event) => event.type === "job.readiness_passed")) {
+  throw new Error("Expected readiness review to append job.readiness_passed event.");
 }
 
 const mockRenderResponse = await server.inject({
@@ -845,6 +922,226 @@ if (mockBeforePreflightResponse.statusCode !== 409) {
   throw new Error(`Expected mock render before preflight to return 409, got ${mockBeforePreflightResponse.statusCode}.`);
 }
 
+const readinessMissingHealthJob = {
+  ...sampleJob,
+  job_id: "smoke-arabic-readiness-missing-health-001",
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-readiness-missing-health-001.mp4"
+  }
+};
+
+const readinessMissingHealthRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: readinessMissingHealthJob
+});
+
+if (readinessMissingHealthRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected missing-health readiness job to queue, got ${readinessMissingHealthRenderResponse.statusCode}.`);
+}
+
+await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-missing-health-001/prepare"
+});
+
+await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-missing-health-001/preflight"
+});
+
+await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-missing-health-001/adapter-payload/short-video-maker"
+});
+
+const readinessMissingHealthResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-missing-health-001/readiness-review"
+});
+
+if (readinessMissingHealthResponse.statusCode !== 200) {
+  throw new Error(`Expected missing adapter health readiness review to return report, got ${readinessMissingHealthResponse.statusCode}.`);
+}
+
+const readinessMissingHealthReview = JSON.parse(readinessMissingHealthResponse.body) as ReadinessReviewBody;
+
+if (
+  readinessMissingHealthReview.status !== "failed" ||
+  readinessMissingHealthReview.ready_for_dry_run !== false ||
+  !readinessMissingHealthReview.checks?.some((check) => check.name === "adapter_health_report_exists" && !check.passed)
+) {
+  throw new Error("Expected readiness to fail when adapter health report is missing.");
+}
+
+const readinessMissingHealthDir = resolve(storageRoot, "jobs", "smoke-arabic-readiness-missing-health-001");
+const readinessMissingHealthStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-readiness-missing-health-001/status"
+});
+const readinessMissingHealthStatus = JSON.parse(readinessMissingHealthStatusResponse.body) as {
+  status?: string;
+  metadata?: { readiness_status?: string; ready_for_dry_run?: boolean };
+};
+
+if (
+  readinessMissingHealthStatus.status !== "preparing" ||
+  readinessMissingHealthStatus.metadata?.readiness_status !== "failed" ||
+  readinessMissingHealthStatus.metadata.ready_for_dry_run !== false
+) {
+  throw new Error("Expected failed readiness to keep status preparing and update failed readiness metadata.");
+}
+
+const readinessMissingHealthEvents = readFileSync(resolve(readinessMissingHealthDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!readinessMissingHealthEvents.some((event) => event.type === "job.readiness_failed")) {
+  throw new Error("Expected failed readiness to append job.readiness_failed event.");
+}
+
+const readinessMissingPayloadJob = {
+  ...sampleJob,
+  job_id: "smoke-arabic-readiness-missing-payload-001",
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-readiness-missing-payload-001.mp4"
+  }
+};
+
+const readinessMissingPayloadRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: readinessMissingPayloadJob
+});
+
+if (readinessMissingPayloadRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected missing-payload readiness job to queue, got ${readinessMissingPayloadRenderResponse.statusCode}.`);
+}
+
+await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-missing-payload-001/prepare"
+});
+
+await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-missing-payload-001/preflight"
+});
+
+await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-missing-payload-001/adapter-health"
+});
+
+const readinessMissingPayloadResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-missing-payload-001/readiness-review"
+});
+
+if (readinessMissingPayloadResponse.statusCode !== 200) {
+  throw new Error(`Expected missing payload readiness review to return report, got ${readinessMissingPayloadResponse.statusCode}.`);
+}
+
+const readinessMissingPayloadReview = JSON.parse(readinessMissingPayloadResponse.body) as ReadinessReviewBody;
+
+if (
+  readinessMissingPayloadReview.status !== "failed" ||
+  readinessMissingPayloadReview.ready_for_dry_run !== false ||
+  !readinessMissingPayloadReview.checks?.some((check) => check.name === "short_video_maker_payload_exists" && !check.passed)
+) {
+  throw new Error("Expected readiness to fail when short-video-maker payload is missing.");
+}
+
+const readinessBrokenPayloadJob = {
+  ...sampleJob,
+  job_id: "smoke-arabic-readiness-broken-payload-001",
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-readiness-broken-payload-001.mp4"
+  }
+};
+
+const readinessBrokenPayloadRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: readinessBrokenPayloadJob
+});
+
+if (readinessBrokenPayloadRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected broken-payload readiness job to queue, got ${readinessBrokenPayloadRenderResponse.statusCode}.`);
+}
+
+await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-broken-payload-001/prepare"
+});
+
+await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-broken-payload-001/preflight"
+});
+
+await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-broken-payload-001/adapter-health"
+});
+
+await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-broken-payload-001/adapter-payload/short-video-maker"
+});
+
+const readinessBrokenPayloadDir = resolve(storageRoot, "jobs", "smoke-arabic-readiness-broken-payload-001");
+const readinessBrokenPayloadPath = resolve(readinessBrokenPayloadDir, "short-video-maker-payload.json");
+const readinessBrokenPayload = JSON.parse(readFileSync(readinessBrokenPayloadPath, "utf8")) as {
+  composition?: Record<string, unknown>;
+};
+writeFileSync(
+  readinessBrokenPayloadPath,
+  `${JSON.stringify(
+    {
+      ...readinessBrokenPayload,
+      composition: {
+        ...(readinessBrokenPayload.composition ?? {}),
+        direction: "ltr"
+      }
+    },
+    null,
+    2
+  )}\n`
+);
+
+const readinessBrokenPayloadResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-readiness-broken-payload-001/readiness-review"
+});
+
+if (readinessBrokenPayloadResponse.statusCode !== 200) {
+  throw new Error(`Expected broken payload readiness review to return report, got ${readinessBrokenPayloadResponse.statusCode}.`);
+}
+
+const readinessBrokenPayloadReview = JSON.parse(readinessBrokenPayloadResponse.body) as ReadinessReviewBody;
+
+if (
+  readinessBrokenPayloadReview.status !== "failed" ||
+  readinessBrokenPayloadReview.ready_for_dry_run !== false ||
+  !readinessBrokenPayloadReview.checks?.some((check) => check.name === "payload_direction" && !check.passed)
+) {
+  throw new Error("Expected readiness to fail when payload direction is not RTL.");
+}
+
+const readinessRenderedResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${sampleJob.job_id}/readiness-review`
+});
+
+if (readinessRenderedResponse.statusCode !== 409) {
+  throw new Error(`Expected readiness review for non-preparing job to return 409, got ${readinessRenderedResponse.statusCode}.`);
+}
+
 const brokenPreflightJob = {
   ...sampleJob,
   job_id: "smoke-arabic-preflight-broken-001",
@@ -957,6 +1254,15 @@ const unknownAdapterPayloadResponse = await server.inject({
 
 if (unknownAdapterPayloadResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job adapter payload to return 404, got ${unknownAdapterPayloadResponse.statusCode}.`);
+}
+
+const unknownReadinessResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/readiness-review"
+});
+
+if (unknownReadinessResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job readiness review to return 404, got ${unknownReadinessResponse.statusCode}.`);
 }
 
 const adapterHealthJob = {
