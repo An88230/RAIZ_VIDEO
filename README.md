@@ -2,7 +2,7 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 9 is intentionally small:
+Phase 10 is intentionally small:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
 - Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
@@ -16,6 +16,7 @@ Phase 9 is intentionally small:
 - Inspect the upstream `short-video-maker` adapter presence without running it.
 - Create a deterministic `short_video_maker` payload artifact without sending it.
 - Validate declared local voice and asset paths as preflight warnings only.
+- Inspect generated job artifacts without changing job status or event history.
 
 ## Vendor Policy
 
@@ -41,7 +42,7 @@ samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
 
-## Phase 9 Commands
+## Phase 10 Commands
 
 ```bash
 npm install
@@ -62,6 +63,7 @@ Current endpoints:
 - `POST /jobs/:id/mock-render`
 - `POST /jobs/:id/adapter-health`
 - `POST /jobs/:id/adapter-payload/short-video-maker`
+- `GET /jobs/:id/artifacts`
 - `GET /jobs/:id/status`
 - `PATCH /jobs/:id/status`
 
@@ -88,6 +90,8 @@ Preflight also checks declared local voice and asset paths. Missing local voice 
 `POST /jobs/:id/adapter-health` writes `storage/jobs/{job_id}/adapter-health.short-video-maker.json` and appends `job.adapter_health_checked` without changing job status.
 
 `POST /jobs/:id/adapter-payload/short-video-maker` requires `status: preparing` and `preflight_status: passed`, writes `storage/jobs/{job_id}/short-video-maker-payload.json`, appends `job.adapter_payload_created`, and leaves job status unchanged.
+
+`GET /jobs/:id/artifacts` returns a read-only inventory of known files under `storage/jobs/{job_id}` including job payload, status, events, render plan, preflight report, adapter health, adapter payload, output directory, and output files. It does not change `status.json`, append events, create files, call adapters, or render video.
 
 Duplicate `job_id` values return `409 conflict` unless overwrite support is explicitly added later.
 

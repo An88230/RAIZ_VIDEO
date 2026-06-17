@@ -286,6 +286,30 @@ The job remains `preparing`. `status.json` receives `metadata.short_video_maker_
 
 Calling this before preflight returns `409 conflict`. Unknown jobs return `404`.
 
+## Inspect Job Artifacts
+
+Phase 10 adds a read-only inventory endpoint for files under `storage/jobs/{job_id}`.
+
+```bash
+curl -s http://localhost:4000/jobs/smoke-arabic-001/artifacts
+```
+
+The response reports known artifacts when present:
+
+```text
+job.json
+status.json
+events.ndjson
+render-plan.json
+preflight-report.json
+adapter-health.short-video-maker.json
+short-video-maker-payload.json
+output/
+output files
+```
+
+The endpoint does not change job status, append events, create files, call adapters, or generate video. Unknown jobs return `404`.
+
 ## Update Status Manually
 
 Phase 3 adds controlled lifecycle transitions for internal testing before real rendering.

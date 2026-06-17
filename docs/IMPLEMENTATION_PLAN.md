@@ -139,9 +139,23 @@ Completed scope:
 - Error-level preflight failures still move `preparing -> failed`.
 - No external asset resolution, Google Drive, render engine, Docker, or video generation occurs.
 
+## Phase 10: Read-Only Job Artifact Inspector
+
+Goal: audit generated local job files before real render integration.
+
+Completed scope:
+
+- `inspectJobArtifacts(jobId)` reads `storage/jobs/{job_id}` without creating or changing files.
+- `GET /jobs/:id/artifacts` returns a structured artifact inventory.
+- The inventory detects `job.json`, `status.json`, `events.ndjson`, `render-plan.json`, `preflight-report.json`, adapter health reports, short-video-maker payloads, `output/`, and output files.
+- Unknown jobs return `404`.
+- Artifact inspection does not change `status.json`.
+- Artifact inspection does not append events.
+- Artifact inspection does not call adapters, render endpoints, Docker, or any external process.
+
 One clear next task:
 
-Add a read-only job artifact inspection endpoint that lists which files exist under `storage/jobs/{job_id}`.
+Add a final readiness review before real short-video-maker integration, using the stored render plan, preflight report, adapter health, and adapter payload as inputs.
 
 ## Later Phases
 
