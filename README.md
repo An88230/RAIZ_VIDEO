@@ -2,12 +2,13 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 1 is intentionally small:
+Phase 2 is intentionally small:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
-- Provide a thin orchestrator API for validation, mock render queueing, and job status.
+- Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
 - Define the render adapter contract without calling external render engines.
 - Prepare Arabic RTL Remotion template rules.
+- Persist accepted render requests under `storage/jobs/{job_id}`.
 
 ## Vendor Policy
 
@@ -23,7 +24,7 @@ RAIZ owns the job schema, orchestrator, adapter contracts, Arabic RTL rules, sta
 ## Project Structure
 
 ```text
-apps/orchestrator              Fastify API skeleton
+apps/orchestrator              Fastify API skeleton with local job persistence
 packages/job-schema            RAIZ Job validation package
 packages/render-adapters       Generic adapter contract and phase 1 stub
 packages/remotion-templates    Arabic RTL template placeholder and rules
@@ -33,7 +34,7 @@ samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
 
-## Phase 1 Commands
+## Phase 2 Commands
 
 ```bash
 npm install
@@ -51,3 +52,13 @@ Current endpoints:
 - `GET /jobs/:id/status`
 
 `POST /jobs/render` validates the payload and returns a queued mock status. It does not render video yet.
+
+For each accepted render request, the orchestrator creates:
+
+```text
+storage/jobs/{job_id}/job.json
+storage/jobs/{job_id}/status.json
+storage/jobs/{job_id}/events.ndjson
+```
+
+Duplicate `job_id` values return `409 conflict` unless overwrite support is explicitly added later.
