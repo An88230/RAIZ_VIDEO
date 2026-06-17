@@ -1,0 +1,7 @@
+{
+  "name": "@raiz/remotion-templates",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Placeholder package for RAIZ Arabic RTL Remotion templates."
+}
