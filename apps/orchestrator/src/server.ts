@@ -7,6 +7,7 @@ import {
   getJobStatus,
   JobConflictError,
   JobNotFoundError,
+  prepareJob,
   updateJobStatus
 } from "./persistence.js";
 import { InvalidStatusTransitionError, isLocalJobStatus } from "./statusTransitions.js";
@@ -97,6 +98,39 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
         return reply.code(404).send({
           status: "not_found",
           job_id: request.params.id
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/prepare", async (request, reply) => {
+    try {
+      return await prepareJob(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (error instanceof InvalidStatusTransitionError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      if (error instanceof JobConflictError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
         });
       }
 

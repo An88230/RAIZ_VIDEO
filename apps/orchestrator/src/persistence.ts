@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { access, appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { prepareRenderPlan, type RenderPlan } from "./renderPlan.js";
 import { assertValidStatusTransition, type LocalJobStatus } from "./statusTransitions.js";
 
 export interface JobStatusRecord {
@@ -101,6 +102,46 @@ export async function getJobStatus(jobId: string, options: PersistenceOptions = 
   }
 }
 
+export async function prepareJob(jobId: string, options: PersistenceOptions = {}): Promise<RenderPlan> {
+  const currentStatus = await getJobStatus(jobId, options);
+  assertValidStatusTransition(currentStatus.status, "preparing");
+
+  const job = await getStoredJob(jobId, options);
+  const jobDir = getJobDir(jobId, options);
+  const outputDir = resolve(jobDir, "output");
+  const renderPlanPath = resolve(jobDir, "render-plan.json");
+  const renderPlan = prepareRenderPlan(job, {
+    outputLocalPath: resolve(outputDir, job.output.filename)
+  });
+
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(resolve(outputDir, ".gitkeep"), "");
+  await writeFile(resolve(renderPlanPath, ""), `${JSON.stringify(renderPlan, null, 2)}\n`, { flag: "wx" });
+
+  const metadata = {
+    ...(currentStatus.metadata ?? {}),
+    render_plan_path: renderPlanPath,
+    output_dir: outputDir
+  };
+
+  await updateJobStatus(jobId, "preparing", {
+    storageRoot: options.storageRoot,
+    adapter: options.adapter,
+    metadata
+  });
+  await appendJobEvent(
+    jobId,
+    {
+      type: "job.render_plan_created",
+      render_plan_path: renderPlanPath,
+      output_dir: outputDir
+    },
+    options
+  );
+
+  return renderPlan;
+}
+
 export async function updateJobStatus(
   jobId: string,
   nextStatus: LocalJobStatus,
@@ -144,6 +185,21 @@ export async function updateJobStatus(
   );
 
   return nextStatusRecord;
+}
+
+async function getStoredJob(jobId: string, options: PersistenceOptions): Promise<RaizJob> {
+  const jobPath = resolve(getJobDir(jobId, options), "job.json");
+
+  try {
+    const rawJob = await readFile(jobPath, "utf8");
+    return JSON.parse(rawJob) as RaizJob;
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      throw new JobNotFoundError(jobId);
+    }
+
+    throw error;
+  }
 }
 
 export async function appendJobEvent(

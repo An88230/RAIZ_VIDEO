@@ -250,6 +250,105 @@ if (invalidTransitionResponse.statusCode !== 409) {
   throw new Error(`Expected queued -> rendered to be rejected, got ${invalidTransitionResponse.statusCode}.`);
 }
 
+const prepareJobPayload = {
+  ...sampleJob,
+  job_id: "smoke-arabic-prepare-001",
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-prepare-001.mp4"
+  }
+};
+
+const prepareRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: prepareJobPayload
+});
+
+if (prepareRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected prepare-path job to queue, got ${prepareRenderResponse.statusCode}.`);
+}
+
+const prepareResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/prepare"
+});
+
+if (prepareResponse.statusCode !== 200) {
+  throw new Error(`Expected prepare endpoint to create render plan, got ${prepareResponse.statusCode}.`);
+}
+
+const prepareJobDir = resolve(storageRoot, "jobs", "smoke-arabic-prepare-001");
+
+if (!existsSync(resolve(prepareJobDir, "render-plan.json"))) {
+  throw new Error("Expected prepare endpoint to create render-plan.json.");
+}
+
+if (!existsSync(resolve(prepareJobDir, "output", ".gitkeep"))) {
+  throw new Error("Expected prepare endpoint to create output/.gitkeep.");
+}
+
+const renderPlan = JSON.parse(readFileSync(resolve(prepareJobDir, "render-plan.json"), "utf8")) as {
+  width?: number;
+  height?: number;
+  output?: { local_path?: string };
+};
+
+if (
+  renderPlan.width !== 1080 ||
+  renderPlan.height !== 1920 ||
+  renderPlan.output?.local_path !== resolve(prepareJobDir, "output", "smoke-arabic-prepare-001.mp4")
+) {
+  throw new Error("Expected render-plan.json to contain deterministic 1080x1920 output plan.");
+}
+
+const preparedStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/status"
+});
+const preparedStatus = JSON.parse(preparedStatusResponse.body) as {
+  status?: string;
+  metadata?: { render_plan_path?: string; output_dir?: string };
+};
+
+if (
+  preparedStatus.status !== "preparing" ||
+  preparedStatus.metadata?.render_plan_path !== resolve(prepareJobDir, "render-plan.json") ||
+  preparedStatus.metadata?.output_dir !== resolve(prepareJobDir, "output")
+) {
+  throw new Error("Expected prepare endpoint to move job to preparing with render plan metadata.");
+}
+
+const prepareEvents = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; from?: string; to?: string });
+
+if (
+  !prepareEvents.some((event) => event.type === "job.status_changed" && event.from === "queued" && event.to === "preparing") ||
+  !prepareEvents.some((event) => event.type === "job.render_plan_created")
+) {
+  throw new Error("Expected prepare endpoint to append preparing and render plan events.");
+}
+
+const duplicatePrepareResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/prepare"
+});
+
+if (duplicatePrepareResponse.statusCode !== 409) {
+  throw new Error(`Expected preparing the same job twice to return 409, got ${duplicatePrepareResponse.statusCode}.`);
+}
+
+const unknownPrepareResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/prepare"
+});
+
+if (unknownPrepareResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job prepare to return 404, got ${unknownPrepareResponse.statusCode}.`);
+}
+
 const unknownStatusResponse = await server.inject({
   method: "GET",
   url: "/jobs/unknown-job/status"
