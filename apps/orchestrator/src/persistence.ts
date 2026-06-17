@@ -1,5 +1,10 @@
 import type { RaizJob } from "@raiz/job-schema";
-import type { AdapterHealthReport } from "@raiz/render-adapters";
+import {
+  mapToShortVideoMakerPayload,
+  type AdapterHealthReport,
+  type ShortVideoMakerPayload,
+  type ShortVideoMakerPreflightReportInput
+} from "@raiz/render-adapters";
 import { constants } from "node:fs";
 import { access, appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -46,6 +51,7 @@ export interface JobPaths {
   outputDir: string;
   preflightReportPath: string;
   shortVideoMakerAdapterHealthPath: string;
+  shortVideoMakerPayloadPath: string;
 }
 
 export class JobConflictError extends Error {
@@ -59,6 +65,20 @@ export class JobNotFoundError extends Error {
   constructor(jobId: string) {
     super(`Job ${jobId} does not exist.`);
     this.name = "JobNotFoundError";
+  }
+}
+
+export class JobAdapterPayloadStateError extends Error {
+  constructor(jobId: string, status: string) {
+    super(`Job ${jobId} must be preparing before adapter payload creation. Current status is ${status}.`);
+    this.name = "JobAdapterPayloadStateError";
+  }
+}
+
+export class JobAdapterPayloadPreflightError extends Error {
+  constructor(jobId: string) {
+    super(`Job ${jobId} must pass preflight before adapter payload creation.`);
+    this.name = "JobAdapterPayloadPreflightError";
   }
 }
 
@@ -152,6 +172,58 @@ export async function writeJobAdapterHealthReport(
     },
     options
   );
+}
+
+export async function createShortVideoMakerPayload(
+  jobId: string,
+  options: PersistenceOptions = {}
+): Promise<ShortVideoMakerPayload> {
+  const status = await getJobStatus(jobId, options);
+
+  if (status.status !== "preparing") {
+    throw new JobAdapterPayloadStateError(jobId, status.status);
+  }
+
+  if (status.metadata?.preflight_status !== "passed") {
+    throw new JobAdapterPayloadPreflightError(jobId);
+  }
+
+  const [job, renderPlan, preflightReport] = await Promise.all([
+    getStoredJob(jobId, options),
+    getStoredRenderPlan(jobId, options),
+    getStoredPreflightReport(jobId, options)
+  ]);
+
+  if (preflightReport.status !== "passed") {
+    throw new JobAdapterPayloadPreflightError(jobId);
+  }
+
+  const paths = getJobPaths(jobId, options);
+  const payload = mapToShortVideoMakerPayload({
+    job,
+    renderPlan,
+    preflightReport
+  });
+
+  await writeFile(paths.shortVideoMakerPayloadPath, `${JSON.stringify(payload, null, 2)}\n`);
+  await updateJobMetadata(
+    jobId,
+    {
+      short_video_maker_payload_path: paths.shortVideoMakerPayloadPath
+    },
+    options
+  );
+  await appendJobEvent(
+    jobId,
+    {
+      type: "job.adapter_payload_created",
+      adapter: "short_video_maker",
+      payload_path: paths.shortVideoMakerPayloadPath
+    },
+    options
+  );
+
+  return payload;
 }
 
 export async function prepareJob(jobId: string, options: PersistenceOptions = {}): Promise<RenderPlan> {
@@ -267,6 +339,24 @@ export async function getStoredRenderPlan(jobId: string, options: PersistenceOpt
   }
 }
 
+async function getStoredPreflightReport(
+  jobId: string,
+  options: PersistenceOptions = {}
+): Promise<ShortVideoMakerPreflightReportInput> {
+  const preflightReportPath = getJobPaths(jobId, options).preflightReportPath;
+
+  try {
+    const rawReport = await readFile(preflightReportPath, "utf8");
+    return JSON.parse(rawReport) as ShortVideoMakerPreflightReportInput;
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      throw new JobNotFoundError(jobId);
+    }
+
+    throw error;
+  }
+}
+
 export async function appendJobEvent(
   jobId: string,
   event: JobEvent,
@@ -293,7 +383,8 @@ export function getJobPaths(jobId: string, options: PersistenceOptions = {}): Jo
     renderPlanPath: resolve(jobDir, "render-plan.json"),
     outputDir: resolve(jobDir, "output"),
     preflightReportPath: resolve(jobDir, "preflight-report.json"),
-    shortVideoMakerAdapterHealthPath: resolve(jobDir, "adapter-health.short-video-maker.json")
+    shortVideoMakerAdapterHealthPath: resolve(jobDir, "adapter-health.short-video-maker.json"),
+    shortVideoMakerPayloadPath: resolve(jobDir, "short-video-maker-payload.json")
   };
 }
 

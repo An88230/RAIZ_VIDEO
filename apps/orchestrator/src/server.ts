@@ -4,8 +4,11 @@ import { shortVideoMakerAdapter } from "@raiz/render-adapters";
 import { resolve } from "node:path";
 
 import {
+  createShortVideoMakerPayload,
   createJobRecord,
   getJobStatus,
+  JobAdapterPayloadPreflightError,
+  JobAdapterPayloadStateError,
   JobConflictError,
   JobNotFoundError,
   prepareJob,
@@ -223,6 +226,31 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
         return reply.code(404).send({
           status: "not_found",
           job_id: request.params.id
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/adapter-payload/short-video-maker", async (request, reply) => {
+    try {
+      return await createShortVideoMakerPayload(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (error instanceof JobAdapterPayloadStateError || error instanceof JobAdapterPayloadPreflightError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
         });
       }
 

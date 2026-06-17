@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { validateRaizJob } from "@raiz/job-schema";
 
+import { mapToShortVideoMakerPayload } from "./shortVideoMakerPayloadMapper.js";
 import { shortVideoMakerAdapter } from "./shortVideoMakerAdapter.js";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -50,6 +51,56 @@ const missingHealth = await shortVideoMakerAdapter.checkHealth({
 
 if (missingHealth.status !== "missing") {
   throw new Error(`Expected fake short-video-maker vendor path to be missing, got ${missingHealth.status}.`);
+}
+
+const payload = mapToShortVideoMakerPayload({
+  job: validation.job,
+  renderPlan: {
+    job_id: validation.job.job_id,
+    adapter: "short_video_maker",
+    engine: "remotion",
+    aspect_ratio: "9:16",
+    width: 1080,
+    height: 1920,
+    language: "ar",
+    direction: "rtl",
+    template_id: validation.job.template.template_id,
+    voice: {
+      provider: validation.job.voice.provider ?? null,
+      voice_name: validation.job.voice.voice_name ?? null
+    },
+    captions: validation.job.captions,
+    assets: {
+      broll_source: validation.job.assets?.broll_source ?? null,
+      broll_folder: validation.job.assets?.broll_folder ?? null,
+      music: validation.job.assets?.music ?? null,
+      logo: validation.job.assets?.logo ?? null
+    },
+    output: {
+      filename: validation.job.output.filename,
+      local_path: "/tmp/smoke-arabic-001.mp4"
+    },
+    created_at: "2026-06-17T00:00:00.000Z"
+  },
+  preflightReport: {
+    job_id: validation.job.job_id,
+    status: "passed",
+    created_at: "2026-06-17T00:00:00.000Z"
+  }
+});
+
+if (
+  payload.adapter !== "short_video_maker" ||
+  payload.composition.width !== 1080 ||
+  payload.composition.height !== 1920 ||
+  payload.composition.language !== "ar" ||
+  payload.composition.direction !== "rtl" ||
+  payload.script.text !== validation.job.script ||
+  payload.voice.provider !== "edge" ||
+  payload.captions.format !== "ass" ||
+  payload.output.filename !== validation.job.output.filename
+) {
+  throw new Error("Expected short-video-maker payload mapper to preserve RAIZ render contract fields.");
 }
 
 rmSync(missingRoot, { force: true, recursive: true });

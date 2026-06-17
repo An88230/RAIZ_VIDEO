@@ -416,6 +416,85 @@ if (
   throw new Error("Expected preflight to keep status preparing and update status metadata.");
 }
 
+const adapterPayloadResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/adapter-payload/short-video-maker"
+});
+
+if (adapterPayloadResponse.statusCode !== 200) {
+  throw new Error(`Expected adapter payload creation after preflight, got ${adapterPayloadResponse.statusCode}.`);
+}
+
+const shortVideoMakerPayloadPath = resolve(prepareJobDir, "short-video-maker-payload.json");
+
+if (!existsSync(shortVideoMakerPayloadPath)) {
+  throw new Error("Expected adapter payload endpoint to create short-video-maker-payload.json.");
+}
+
+const shortVideoMakerPayload = JSON.parse(readFileSync(shortVideoMakerPayloadPath, "utf8")) as {
+  adapter?: string;
+  composition?: {
+    aspect_ratio?: string;
+    width?: number;
+    height?: number;
+    language?: string;
+    direction?: string;
+  };
+  script?: { title?: string; text?: string };
+  voice?: { provider?: string | null; voice_name?: string | null };
+  captions?: { enabled?: boolean; format?: string; burn_in?: boolean };
+  output?: { filename?: string; local_path?: string };
+};
+
+if (
+  shortVideoMakerPayload.adapter !== "short_video_maker" ||
+  shortVideoMakerPayload.composition?.aspect_ratio !== "9:16" ||
+  shortVideoMakerPayload.composition.width !== 1080 ||
+  shortVideoMakerPayload.composition.height !== 1920 ||
+  shortVideoMakerPayload.composition.language !== "ar" ||
+  shortVideoMakerPayload.composition.direction !== "rtl" ||
+  shortVideoMakerPayload.script?.title !== sampleJob.title ||
+  shortVideoMakerPayload.script?.text !== sampleJob.script ||
+  shortVideoMakerPayload.voice?.provider !== "edge" ||
+  shortVideoMakerPayload.voice?.voice_name !== "ar-SA-HamedNeural" ||
+  shortVideoMakerPayload.captions?.enabled !== true ||
+  shortVideoMakerPayload.captions?.format !== "ass" ||
+  shortVideoMakerPayload.captions?.burn_in !== true ||
+  shortVideoMakerPayload.output?.filename !== "smoke-arabic-prepare-001.mp4" ||
+  shortVideoMakerPayload.output?.local_path !== resolve(prepareJobDir, "output", "smoke-arabic-prepare-001.mp4")
+) {
+  throw new Error("Expected short-video-maker payload to contain RAIZ render plan fields.");
+}
+
+const adapterPayloadStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/status"
+});
+const adapterPayloadStatus = JSON.parse(adapterPayloadStatusResponse.body) as {
+  status?: string;
+  metadata?: { short_video_maker_payload_path?: string };
+};
+
+if (
+  adapterPayloadStatus.status !== "preparing" ||
+  adapterPayloadStatus.metadata?.short_video_maker_payload_path !== shortVideoMakerPayloadPath
+) {
+  throw new Error("Expected adapter payload creation to leave status preparing and update metadata.");
+}
+
+const adapterPayloadEvents = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; adapter?: string });
+
+if (
+  !adapterPayloadEvents.some(
+    (event) => event.type === "job.adapter_payload_created" && event.adapter === "short_video_maker"
+  )
+) {
+  throw new Error("Expected adapter payload creation to append job.adapter_payload_created event.");
+}
+
 const mockRenderResponse = await server.inject({
   method: "POST",
   url: "/jobs/smoke-arabic-prepare-001/mock-render"
@@ -524,6 +603,15 @@ const mockBeforePreflightPrepareResponse = await server.inject({
 
 if (mockBeforePreflightPrepareResponse.statusCode !== 200) {
   throw new Error(`Expected mock-before-preflight job to prepare, got ${mockBeforePreflightPrepareResponse.statusCode}.`);
+}
+
+const payloadBeforePreflightResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-mock-before-preflight-001/adapter-payload/short-video-maker"
+});
+
+if (payloadBeforePreflightResponse.statusCode !== 409) {
+  throw new Error(`Expected adapter payload before preflight to return 409, got ${payloadBeforePreflightResponse.statusCode}.`);
 }
 
 const mockBeforePreflightResponse = await server.inject({
@@ -638,6 +726,15 @@ const unknownMockRenderResponse = await server.inject({
 
 if (unknownMockRenderResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job mock render to return 404, got ${unknownMockRenderResponse.statusCode}.`);
+}
+
+const unknownAdapterPayloadResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/adapter-payload/short-video-maker"
+});
+
+if (unknownAdapterPayloadResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job adapter payload to return 404, got ${unknownAdapterPayloadResponse.statusCode}.`);
 }
 
 const adapterHealthJob = {
