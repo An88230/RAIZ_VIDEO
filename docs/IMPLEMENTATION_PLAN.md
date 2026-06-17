@@ -170,9 +170,28 @@ Completed scope:
 - Failed readiness keeps status unchanged, records `ready_for_dry_run: false`, and appends `job.readiness_failed`.
 - Readiness does not call short-video-maker, call render endpoints, start Docker, install dependencies, or generate video.
 
+## Phase 12: short-video-maker Dry-Run Request Artifact
+
+Goal: create a deterministic local dry-run request artifact without sending it anywhere.
+
+Completed scope:
+
+- `createShortVideoMakerDryRunRequest(jobId)` reads required local artifacts.
+- `POST /jobs/:id/adapter-dry-run/short-video-maker` writes `storage/jobs/{job_id}/short-video-maker-request.dry-run.json`.
+- Dry-run request creation requires status `preparing`.
+- Dry-run request creation requires `metadata.preflight_status: passed`.
+- Dry-run request creation requires `metadata.readiness_status: passed` and `metadata.ready_for_dry_run: true`.
+- The request includes short-video-maker composition, script, voice, captions, assets, and output fields.
+- The request records safety flags with execution, process start, video generation, and vendor modification disabled.
+- Status remains unchanged.
+- Status metadata records the dry-run request path and `dry_run_request_created: true`.
+- The event log receives `job.adapter_dry_run_request_created`.
+- Artifact inspection detects `short-video-maker-request.dry-run.json`.
+- No request is sent, no short-video-maker process is called, no render endpoint is called, no Docker process is started, no dependencies are installed, and no video is generated.
+
 One clear next task:
 
-Add a dry-run request artifact for short-video-maker without sending it to the process.
+Add a controlled local dry-run sender stub that can be enabled later behind an explicit execution flag.
 
 ## Later Phases
 

@@ -310,6 +310,30 @@ The job remains `preparing`. `status.json` receives `metadata.readiness_review_p
 
 Missing adapter health, missing payload, bad payload composition, or missing output directory fail readiness without moving the job to `failed`. Unknown jobs return `404`; jobs that are not `preparing` return `409 conflict`.
 
+## Create short-video-maker Dry-Run Request
+
+Phase 12 creates a local request artifact for a future short-video-maker dry-run. It does not send the request, call `short-video-maker`, call an external render endpoint, start Docker, start a process, install dependencies, or generate video.
+
+Run this after readiness passes:
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/adapter-dry-run/short-video-maker
+```
+
+This creates:
+
+```text
+storage/jobs/smoke-arabic-001/short-video-maker-request.dry-run.json
+```
+
+The artifact contains the adapter payload fields under `request`, a disabled local target, and safety flags proving that execution, process start, video generation, and vendor modification are all disabled.
+
+The job remains `preparing`. `status.json` receives `metadata.short_video_maker_dry_run_request_path` and `metadata.dry_run_request_created`. `events.ndjson` receives `job.adapter_dry_run_request_created`.
+
+Calling this before readiness passes returns `409 conflict`. Unknown jobs return `404`.
+
 ## Inspect Job Artifacts
 
 Phase 10 adds a read-only inventory endpoint for files under `storage/jobs/{job_id}`.
@@ -328,6 +352,7 @@ render-plan.json
 preflight-report.json
 adapter-health.short-video-maker.json
 short-video-maker-payload.json
+short-video-maker-request.dry-run.json
 output/
 output files
 ```

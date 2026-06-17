@@ -2,7 +2,7 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 11 is intentionally small:
+Phase 12 is intentionally small:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
 - Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
@@ -18,6 +18,7 @@ Phase 11 is intentionally small:
 - Validate declared local voice and asset paths as preflight warnings only.
 - Inspect generated job artifacts without changing job status or event history.
 - Run a local readiness review before any short-video-maker dry-run generation.
+- Create a short-video-maker dry-run request artifact without sending or executing it.
 
 ## Vendor Policy
 
@@ -43,7 +44,7 @@ samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
 
-## Phase 11 Commands
+## Phase 12 Commands
 
 ```bash
 npm install
@@ -65,6 +66,7 @@ Current endpoints:
 - `POST /jobs/:id/adapter-health`
 - `POST /jobs/:id/adapter-payload/short-video-maker`
 - `POST /jobs/:id/readiness-review`
+- `POST /jobs/:id/adapter-dry-run/short-video-maker`
 - `GET /jobs/:id/artifacts`
 - `GET /jobs/:id/status`
 - `PATCH /jobs/:id/status`
@@ -94,6 +96,8 @@ Preflight also checks declared local voice and asset paths. Missing local voice 
 `POST /jobs/:id/adapter-payload/short-video-maker` requires `status: preparing` and `preflight_status: passed`, writes `storage/jobs/{job_id}/short-video-maker-payload.json`, appends `job.adapter_payload_created`, and leaves job status unchanged.
 
 `POST /jobs/:id/readiness-review` requires the job to remain `preparing`, checks the required local artifacts, verifies preflight, adapter health, short-video-maker payload composition, and output directory readiness, then writes `storage/jobs/{job_id}/readiness-review.json`. It updates readiness metadata and appends either `job.readiness_passed` or `job.readiness_failed`, but it does not call short-video-maker and does not generate video.
+
+`POST /jobs/:id/adapter-dry-run/short-video-maker` requires `status: preparing`, `preflight_status: passed`, and readiness metadata showing the job is ready for dry-run. It writes `storage/jobs/{job_id}/short-video-maker-request.dry-run.json`, updates dry-run metadata, and appends `job.adapter_dry_run_request_created`. It does not send the request, call short-video-maker, start a process, modify vendor files, or generate video.
 
 `GET /jobs/:id/artifacts` returns a read-only inventory of known files under `storage/jobs/{job_id}` including job payload, status, events, render plan, preflight report, adapter health, adapter payload, output directory, and output files. It does not change `status.json`, append events, create files, call adapters, or render video.
 
