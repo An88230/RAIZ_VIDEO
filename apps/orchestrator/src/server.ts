@@ -10,6 +10,7 @@ import {
   prepareJob,
   updateJobStatus
 } from "./persistence.js";
+import { JobMockRenderPreflightError, JobMockRenderStateError, runMockRender } from "./mockRender.js";
 import { JobPreflightStateError, runPreflight } from "./preflight.js";
 import { InvalidStatusTransitionError, isLocalJobStatus } from "./statusTransitions.js";
 
@@ -153,6 +154,31 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
       }
 
       if (error instanceof JobPreflightStateError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/mock-render", async (request, reply) => {
+    try {
+      return await runMockRender(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (error instanceof JobMockRenderStateError || error instanceof JobMockRenderPreflightError) {
         return reply.code(409).send({
           status: "conflict",
           job_id: request.params.id,

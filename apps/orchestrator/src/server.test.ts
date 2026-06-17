@@ -391,6 +391,60 @@ if (
   throw new Error("Expected preflight to keep status preparing and update status metadata.");
 }
 
+const mockRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/mock-render"
+});
+
+if (mockRenderResponse.statusCode !== 200) {
+  throw new Error(`Expected mock render to complete after preflight, got ${mockRenderResponse.statusCode}.`);
+}
+
+const mockRenderStatus = JSON.parse(mockRenderResponse.body) as {
+  status?: string;
+  output_path?: string | null;
+  metadata?: { mock_render?: boolean; render_completed_at?: string };
+};
+const mockOutputPath = resolve(prepareJobDir, "output", "smoke-arabic-prepare-001.mock-render.txt");
+
+if (
+  mockRenderStatus.status !== "rendered" ||
+  mockRenderStatus.output_path !== mockOutputPath ||
+  mockRenderStatus.metadata?.mock_render !== true ||
+  !mockRenderStatus.metadata.render_completed_at
+) {
+  throw new Error("Expected mock render to return rendered status with output path and metadata.");
+}
+
+if (!existsSync(mockOutputPath)) {
+  throw new Error("Expected mock render output artifact to be created.");
+}
+
+const mockOutput = readFileSync(mockOutputPath, "utf8");
+
+if (
+  !mockOutput.includes("job_id: smoke-arabic-prepare-001") ||
+  !mockOutput.includes("width: 1080") ||
+  !mockOutput.includes("height: 1920") ||
+  !mockOutput.includes("This is a mock render artifact. No video was generated.")
+) {
+  throw new Error("Expected mock render artifact to contain deterministic render details.");
+}
+
+const mockRenderEvents = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; from?: string; to?: string });
+
+if (
+  !mockRenderEvents.some((event) => event.type === "job.status_changed" && event.from === "preparing" && event.to === "rendering") ||
+  !mockRenderEvents.some((event) => event.type === "job.status_changed" && event.from === "rendering" && event.to === "rendered") ||
+  !mockRenderEvents.some((event) => event.type === "job.mock_render_started") ||
+  !mockRenderEvents.some((event) => event.type === "job.mock_render_completed")
+) {
+  throw new Error("Expected mock render to record rendering/rendered transitions and events.");
+}
+
 const queuedPreflightJob = {
   ...sampleJob,
   job_id: "smoke-arabic-preflight-queued-001",
@@ -417,6 +471,43 @@ const queuedPreflightResponse = await server.inject({
 
 if (queuedPreflightResponse.statusCode !== 409) {
   throw new Error(`Expected preflight for queued job to return 409, got ${queuedPreflightResponse.statusCode}.`);
+}
+
+const mockBeforePreflightJob = {
+  ...sampleJob,
+  job_id: "smoke-arabic-mock-before-preflight-001",
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-mock-before-preflight-001.mp4"
+  }
+};
+
+const mockBeforePreflightRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: mockBeforePreflightJob
+});
+
+if (mockBeforePreflightRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected mock-before-preflight job to queue, got ${mockBeforePreflightRenderResponse.statusCode}.`);
+}
+
+const mockBeforePreflightPrepareResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-mock-before-preflight-001/prepare"
+});
+
+if (mockBeforePreflightPrepareResponse.statusCode !== 200) {
+  throw new Error(`Expected mock-before-preflight job to prepare, got ${mockBeforePreflightPrepareResponse.statusCode}.`);
+}
+
+const mockBeforePreflightResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-mock-before-preflight-001/mock-render"
+});
+
+if (mockBeforePreflightResponse.statusCode !== 409) {
+  throw new Error(`Expected mock render before preflight to return 409, got ${mockBeforePreflightResponse.statusCode}.`);
 }
 
 const brokenPreflightJob = {
@@ -513,6 +604,15 @@ const unknownPreflightResponse = await server.inject({
 
 if (unknownPreflightResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job preflight to return 404, got ${unknownPreflightResponse.statusCode}.`);
+}
+
+const unknownMockRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/mock-render"
+});
+
+if (unknownMockRenderResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job mock render to return 404, got ${unknownMockRenderResponse.statusCode}.`);
 }
 
 const unknownStatusResponse = await server.inject({
