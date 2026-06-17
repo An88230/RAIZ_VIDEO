@@ -3,7 +3,7 @@ import { constants } from "node:fs";
 import { access, appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-export type LocalJobStatus = "queued" | "processing" | "rendered" | "failed";
+import { assertValidStatusTransition, type LocalJobStatus } from "./statusTransitions.js";
 
 export interface JobStatusRecord {
   job_id: string;
@@ -13,6 +13,7 @@ export interface JobStatusRecord {
   updated_at: string;
   output_path: string | null;
   error: string | null;
+  metadata?: Record<string, unknown>;
 }
 
 export interface JobEvent {
@@ -26,6 +27,12 @@ export interface PersistenceOptions {
   storageRoot?: string;
   allowOverwrite?: boolean;
   adapter?: string;
+}
+
+export interface UpdateJobStatusOptions extends PersistenceOptions {
+  output_path?: string | null;
+  error?: string | null;
+  metadata?: Record<string, unknown>;
 }
 
 export class JobConflictError extends Error {
@@ -92,6 +99,51 @@ export async function getJobStatus(jobId: string, options: PersistenceOptions = 
 
     throw error;
   }
+}
+
+export async function updateJobStatus(
+  jobId: string,
+  nextStatus: LocalJobStatus,
+  options: UpdateJobStatusOptions = {}
+): Promise<JobStatusRecord> {
+  const currentStatus = await getJobStatus(jobId, options);
+  assertValidStatusTransition(currentStatus.status, nextStatus);
+
+  const timestamp = new Date().toISOString();
+  const nextStatusRecord: JobStatusRecord = {
+    ...currentStatus,
+    status: nextStatus,
+    adapter: options.adapter ?? currentStatus.adapter,
+    updated_at: timestamp
+  };
+
+  if ("output_path" in options) {
+    nextStatusRecord.output_path = options.output_path ?? null;
+  }
+
+  if ("error" in options) {
+    nextStatusRecord.error = options.error ?? null;
+  }
+
+  if (options.metadata !== undefined) {
+    nextStatusRecord.metadata = options.metadata;
+  }
+
+  await writeFile(resolve(getJobDir(jobId, options), "status.json"), `${JSON.stringify(nextStatusRecord, null, 2)}\n`);
+  await appendJobEvent(
+    jobId,
+    {
+      type: "job.status_changed",
+      job_id: jobId,
+      from: currentStatus.status,
+      to: nextStatus,
+      timestamp,
+      ...(options.metadata !== undefined ? { metadata: options.metadata } : {})
+    },
+    options
+  );
+
+  return nextStatusRecord;
 }
 
 export async function appendJobEvent(

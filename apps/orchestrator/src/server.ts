@@ -2,7 +2,14 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { validateRaizJob } from "@raiz/job-schema";
 import { shortVideoMakerAdapter } from "@raiz/render-adapters";
 
-import { createJobRecord, getJobStatus, JobConflictError, JobNotFoundError } from "./persistence.js";
+import {
+  createJobRecord,
+  getJobStatus,
+  JobConflictError,
+  JobNotFoundError,
+  updateJobStatus
+} from "./persistence.js";
+import { InvalidStatusTransitionError, isLocalJobStatus } from "./statusTransitions.js";
 
 export interface CreateServerOptions {
   logger?: boolean;
@@ -10,6 +17,14 @@ export interface CreateServerOptions {
 }
 
 const renderAdapters = [shortVideoMakerAdapter];
+
+interface PatchJobStatusBody {
+  status?: unknown;
+  adapter?: string;
+  output_path?: string | null;
+  error?: string | null;
+  metadata?: Record<string, unknown>;
+}
 
 export function createServer(options: CreateServerOptions = {}): FastifyInstance {
   const server = Fastify({ logger: options.logger ?? false });
@@ -82,6 +97,42 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
         return reply.code(404).send({
           status: "not_found",
           job_id: request.params.id
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.patch<{ Params: { id: string }; Body: PatchJobStatusBody }>("/jobs/:id/status", async (request, reply) => {
+    if (!isLocalJobStatus(request.body.status)) {
+      return reply.code(400).send({
+        status: "rejected",
+        error: "Request body must include a valid job status."
+      });
+    }
+
+    try {
+      return await updateJobStatus(request.params.id, request.body.status, {
+        storageRoot: options.storageRoot,
+        adapter: request.body.adapter,
+        output_path: request.body.output_path,
+        error: request.body.error,
+        metadata: request.body.metadata
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (error instanceof InvalidStatusTransitionError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
         });
       }
 

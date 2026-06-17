@@ -105,6 +105,151 @@ if (statusBody.status !== "queued") {
   throw new Error(`Expected job status queued, got ${statusBody.status}.`);
 }
 
+const preparingResponse = await server.inject({
+  method: "PATCH",
+  url: `/jobs/${sampleJob.job_id}/status`,
+  payload: {
+    status: "preparing",
+    metadata: { step: "assets" }
+  }
+});
+
+if (preparingResponse.statusCode !== 200) {
+  throw new Error(`Expected queued -> preparing to work, got ${preparingResponse.statusCode}.`);
+}
+
+const renderingResponse = await server.inject({
+  method: "PATCH",
+  url: `/jobs/${sampleJob.job_id}/status`,
+  payload: {
+    status: "rendering",
+    metadata: { adapter: "short_video_maker" }
+  }
+});
+
+if (renderingResponse.statusCode !== 200) {
+  throw new Error(`Expected preparing -> rendering to work, got ${renderingResponse.statusCode}.`);
+}
+
+const renderedResponse = await server.inject({
+  method: "PATCH",
+  url: `/jobs/${sampleJob.job_id}/status`,
+  payload: {
+    status: "rendered",
+    output_path: "/storage/exports/smoke-arabic-001.mp4"
+  }
+});
+
+if (renderedResponse.statusCode !== 200) {
+  throw new Error(`Expected rendering -> rendered to work, got ${renderedResponse.statusCode}.`);
+}
+
+const renderedBody = JSON.parse(renderedResponse.body) as { status?: string; output_path?: string | null };
+
+if (renderedBody.status !== "rendered" || renderedBody.output_path !== "/storage/exports/smoke-arabic-001.mp4") {
+  throw new Error("Expected rendered status to include output_path.");
+}
+
+const lifecycleEvents = readFileSync(resolve(jobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; from?: string; to?: string; metadata?: unknown });
+
+const statusChangedEvents = lifecycleEvents.filter((event) => event.type === "job.status_changed");
+
+if (
+  statusChangedEvents.length !== 3 ||
+  statusChangedEvents[0]?.from !== "queued" ||
+  statusChangedEvents[0]?.to !== "preparing" ||
+  statusChangedEvents[1]?.from !== "preparing" ||
+  statusChangedEvents[1]?.to !== "rendering" ||
+  statusChangedEvents[2]?.from !== "rendering" ||
+  statusChangedEvents[2]?.to !== "rendered"
+) {
+  throw new Error("Expected events.ndjson to record status transition events.");
+}
+
+const failedJob = {
+  ...sampleJob,
+  job_id: "smoke-arabic-failed-001",
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-failed-001.mp4"
+  }
+};
+
+const failedJobRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: failedJob
+});
+
+if (failedJobRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected failed-path job to queue, got ${failedJobRenderResponse.statusCode}.`);
+}
+
+await server.inject({
+  method: "PATCH",
+  url: "/jobs/smoke-arabic-failed-001/status",
+  payload: { status: "preparing" }
+});
+
+await server.inject({
+  method: "PATCH",
+  url: "/jobs/smoke-arabic-failed-001/status",
+  payload: { status: "rendering" }
+});
+
+const failedResponse = await server.inject({
+  method: "PATCH",
+  url: "/jobs/smoke-arabic-failed-001/status",
+  payload: {
+    status: "failed",
+    error: "mock render failure"
+  }
+});
+
+if (failedResponse.statusCode !== 200) {
+  throw new Error(`Expected rendering -> failed to work, got ${failedResponse.statusCode}.`);
+}
+
+const failedBody = JSON.parse(failedResponse.body) as { status?: string; error?: string | null };
+
+if (failedBody.status !== "failed" || failedBody.error !== "mock render failure") {
+  throw new Error("Expected failed status to include error.");
+}
+
+const invalidTransitionJob = {
+  ...sampleJob,
+  job_id: "smoke-arabic-invalid-transition-001",
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-invalid-transition-001.mp4"
+  }
+};
+
+const invalidTransitionRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: invalidTransitionJob
+});
+
+if (invalidTransitionRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected invalid-transition job to queue, got ${invalidTransitionRenderResponse.statusCode}.`);
+}
+
+const invalidTransitionResponse = await server.inject({
+  method: "PATCH",
+  url: "/jobs/smoke-arabic-invalid-transition-001/status",
+  payload: {
+    status: "rendered"
+  }
+});
+
+if (invalidTransitionResponse.statusCode !== 409) {
+  throw new Error(`Expected queued -> rendered to be rejected, got ${invalidTransitionResponse.statusCode}.`);
+}
+
 const unknownStatusResponse = await server.inject({
   method: "GET",
   url: "/jobs/unknown-job/status"
@@ -112,6 +257,18 @@ const unknownStatusResponse = await server.inject({
 
 if (unknownStatusResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job status to return 404, got ${unknownStatusResponse.statusCode}.`);
+}
+
+const unknownPatchResponse = await server.inject({
+  method: "PATCH",
+  url: "/jobs/unknown-job/status",
+  payload: {
+    status: "preparing"
+  }
+});
+
+if (unknownPatchResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job transition to return 404, got ${unknownPatchResponse.statusCode}.`);
 }
 
 const invalidStorageRoot = mkdtempSync(resolve(tmpdir(), "raiz-invalid-test-"));
