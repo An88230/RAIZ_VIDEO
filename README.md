@@ -2,7 +2,7 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 5 is intentionally small:
+Phase 6 is intentionally small:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
 - Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
@@ -12,6 +12,7 @@ Phase 5 is intentionally small:
 - Control job status transitions before real render execution.
 - Create deterministic render plans before calling any render engine.
 - Run render readiness preflight checks without generating video.
+- Prove the full local lifecycle with a mock render artifact.
 
 ## Vendor Policy
 
@@ -37,7 +38,7 @@ samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
 
-## Phase 5 Commands
+## Phase 6 Commands
 
 ```bash
 npm install
@@ -54,6 +55,7 @@ Current endpoints:
 - `POST /jobs/render`
 - `POST /jobs/:id/prepare`
 - `POST /jobs/:id/preflight`
+- `POST /jobs/:id/mock-render`
 - `GET /jobs/:id/status`
 - `PATCH /jobs/:id/status`
 
@@ -70,6 +72,8 @@ storage/jobs/{job_id}/events.ndjson
 `POST /jobs/:id/prepare` reads `job.json`, requires the job to be `queued`, writes `render-plan.json`, creates `output/.gitkeep`, and moves the job to `preparing`. It does not call a render adapter and does not generate video.
 
 `POST /jobs/:id/preflight` reads `job.json`, `status.json`, and `render-plan.json`, requires the job to be `preparing`, writes `preflight-report.json`, and records whether the job is ready for a future render call.
+
+`POST /jobs/:id/mock-render` requires `preflight_status: passed`, moves the job through `rendering -> rendered`, and writes a text artifact at `storage/jobs/{job_id}/output/{job_id}.mock-render.txt`. It does not call a render engine and does not generate video.
 
 Duplicate `job_id` values return `409 conflict` unless overwrite support is explicitly added later.
 

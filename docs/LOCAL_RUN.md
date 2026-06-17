@@ -158,6 +158,45 @@ If an error-level preflight check fails, the job moves from `preparing` to `fail
 
 Preflight does not require real media files yet. Assets are only summarized from the job and render plan.
 
+## Run Mock Render
+
+Phase 6 proves the full local lifecycle before integrating `short-video-maker`.
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/mock-render
+```
+
+This requires:
+
+```text
+status: preparing
+metadata.preflight_status: passed
+```
+
+It transitions:
+
+```text
+preparing -> rendering -> rendered
+```
+
+It creates a text artifact, not a video:
+
+```text
+storage/jobs/smoke-arabic-001/output/smoke-arabic-001.mock-render.txt
+```
+
+The artifact includes the job id, title, Arabic direction metadata, 1080x1920 dimensions, template id, adapter, engine, created timestamp, and this note:
+
+```text
+This is a mock render artifact. No video was generated.
+```
+
+`status.json` receives the mock output path plus `metadata.mock_render: true` and `metadata.render_completed_at`. `events.ndjson` receives `job.mock_render_started` and `job.mock_render_completed`.
+
+Calling mock render before passing preflight returns `409 conflict`. Unknown jobs return `404`.
+
 ## Update Status Manually
 
 Phase 3 adds controlled lifecycle transitions for internal testing before real rendering.

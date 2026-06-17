@@ -75,6 +75,21 @@ Completed scope:
 - Failed preflight appends `job.preflight_failed`.
 - Preflight does not require real media files and does not generate video.
 
+## Phase 6: Mock Render Worker
+
+Goal: prove the full local lifecycle from queued to rendered using a mock renderer before integrating a real render engine.
+
+Completed scope:
+
+- `POST /jobs/:id/mock-render` reads `job.json`, `status.json`, `render-plan.json`, and `preflight-report.json`.
+- Mock render requires current status `preparing`.
+- Mock render requires `metadata.preflight_status: passed`.
+- Mock render transitions `preparing -> rendering -> rendered`.
+- Mock render writes `storage/jobs/{job_id}/output/{job_id}.mock-render.txt`.
+- Mock render updates `status.json` with `output_path`, `metadata.mock_render`, and `metadata.render_completed_at`.
+- Mock render appends `job.mock_render_started` and `job.mock_render_completed`.
+- Mock render does not call a render engine and does not generate video.
+
 One clear next task:
 
 Add local voice and asset path validation as warnings first, still without rendering.
