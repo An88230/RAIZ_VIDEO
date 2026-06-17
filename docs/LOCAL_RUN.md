@@ -91,6 +91,61 @@ storage/jobs/smoke-arabic-001/status.json
 
 Unknown jobs return `404`.
 
+## Update Status Manually
+
+Phase 3 adds controlled lifecycle transitions for internal testing before real rendering.
+
+Allowed statuses:
+
+```text
+queued -> preparing
+preparing -> rendering
+rendering -> rendered
+rendering -> failed
+preparing -> failed
+queued -> cancelled
+preparing -> cancelled
+rendering -> cancelled
+```
+
+Move a queued job to preparing:
+
+```bash
+curl -s \
+  -X PATCH \
+  -H "content-type: application/json" \
+  --data '{"status":"preparing","metadata":{"step":"assets"}}' \
+  http://localhost:4000/jobs/smoke-arabic-001/status
+```
+
+Move preparing to rendering:
+
+```bash
+curl -s \
+  -X PATCH \
+  -H "content-type: application/json" \
+  --data '{"status":"rendering"}' \
+  http://localhost:4000/jobs/smoke-arabic-001/status
+```
+
+Mark rendering as rendered:
+
+```bash
+curl -s \
+  -X PATCH \
+  -H "content-type: application/json" \
+  --data '{"status":"rendered","output_path":"/storage/exports/smoke-arabic-001.mp4"}' \
+  http://localhost:4000/jobs/smoke-arabic-001/status
+```
+
+Invalid transitions return `409 conflict`. Unknown jobs return `404`.
+
+Each accepted transition appends a `job.status_changed` line to:
+
+```text
+storage/jobs/smoke-arabic-001/events.ndjson
+```
+
 ## Duplicate Job IDs
 
 Submitting the same sample twice returns `409 conflict`:
