@@ -22,6 +22,7 @@ interface ArtifactInventoryBody {
     has_preflight_report?: boolean;
     has_adapter_health?: boolean;
     has_short_video_maker_payload?: boolean;
+    has_short_video_maker_dry_run_request?: boolean;
     has_output?: boolean;
   };
 }
@@ -31,6 +32,26 @@ interface ReadinessReviewBody {
   status?: string;
   checks?: Array<{ name?: string; passed?: boolean; severity?: string }>;
   errors?: string[];
+}
+
+interface ShortVideoMakerDryRunRequestBody {
+  adapter?: string;
+  mode?: string;
+  request?: {
+    composition?: {
+      aspect_ratio?: string;
+      width?: number;
+      height?: number;
+      language?: string;
+      direction?: string;
+    };
+  };
+  safety?: {
+    will_execute?: boolean;
+    will_start_process?: boolean;
+    will_generate_video?: boolean;
+    will_modify_vendor?: boolean;
+  };
 }
 
 const validateResponse = await server.inject({
@@ -676,6 +697,95 @@ if (!readinessEvents.some((event) => event.type === "job.readiness_passed")) {
   throw new Error("Expected readiness review to append job.readiness_passed event.");
 }
 
+const dryRunRequestResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/adapter-dry-run/short-video-maker"
+});
+
+if (dryRunRequestResponse.statusCode !== 200) {
+  throw new Error(`Expected dry-run request creation after readiness, got ${dryRunRequestResponse.statusCode}.`);
+}
+
+const dryRunRequest = JSON.parse(dryRunRequestResponse.body) as ShortVideoMakerDryRunRequestBody;
+
+if (
+  dryRunRequest.adapter !== "short_video_maker" ||
+  dryRunRequest.mode !== "dry_run" ||
+  dryRunRequest.safety?.will_execute !== false ||
+  dryRunRequest.safety.will_start_process !== false ||
+  dryRunRequest.safety.will_generate_video !== false ||
+  dryRunRequest.safety.will_modify_vendor !== false ||
+  dryRunRequest.request?.composition?.aspect_ratio !== "9:16" ||
+  dryRunRequest.request.composition.width !== 1080 ||
+  dryRunRequest.request.composition.height !== 1920 ||
+  dryRunRequest.request.composition.language !== "ar" ||
+  dryRunRequest.request.composition.direction !== "rtl"
+) {
+  throw new Error("Expected dry-run request to preserve payload composition and disable all execution safety flags.");
+}
+
+const dryRunRequestPath = resolve(prepareJobDir, "short-video-maker-request.dry-run.json");
+
+if (!existsSync(dryRunRequestPath)) {
+  throw new Error("Expected dry-run request endpoint to create short-video-maker-request.dry-run.json.");
+}
+
+const dryRunStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/status"
+});
+const dryRunStatus = JSON.parse(dryRunStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    short_video_maker_dry_run_request_path?: string;
+    dry_run_request_created?: boolean;
+  };
+};
+
+if (
+  dryRunStatus.status !== "preparing" ||
+  dryRunStatus.metadata?.short_video_maker_dry_run_request_path !== dryRunRequestPath ||
+  dryRunStatus.metadata.dry_run_request_created !== true
+) {
+  throw new Error("Expected dry-run request creation to keep status preparing and update dry-run metadata.");
+}
+
+const dryRunEvents = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; adapter?: string });
+
+if (
+  !dryRunEvents.some(
+    (event) => event.type === "job.adapter_dry_run_request_created" && event.adapter === "short_video_maker"
+  )
+) {
+  throw new Error("Expected dry-run request creation to append job.adapter_dry_run_request_created event.");
+}
+
+const dryRunArtifactsResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/artifacts"
+});
+
+if (dryRunArtifactsResponse.statusCode !== 200) {
+  throw new Error(`Expected artifacts endpoint to work after dry-run request, got ${dryRunArtifactsResponse.statusCode}.`);
+}
+
+const dryRunArtifacts = JSON.parse(dryRunArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  dryRunArtifacts.summary?.has_short_video_maker_dry_run_request !== true ||
+  !dryRunArtifacts.artifacts?.some(
+    (artifact) =>
+      artifact.name === "short-video-maker-request.dry-run.json" &&
+      artifact.type === "adapter_dry_run_request" &&
+      artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect short-video-maker dry-run request.");
+}
+
 const mockRenderResponse = await server.inject({
   method: "POST",
   url: "/jobs/smoke-arabic-prepare-001/mock-render"
@@ -920,6 +1030,15 @@ const mockBeforePreflightResponse = await server.inject({
 
 if (mockBeforePreflightResponse.statusCode !== 409) {
   throw new Error(`Expected mock render before preflight to return 409, got ${mockBeforePreflightResponse.statusCode}.`);
+}
+
+const dryRunBeforeReadinessResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-mock-before-preflight-001/adapter-dry-run/short-video-maker"
+});
+
+if (dryRunBeforeReadinessResponse.statusCode !== 409) {
+  throw new Error(`Expected dry-run request before readiness to return 409, got ${dryRunBeforeReadinessResponse.statusCode}.`);
 }
 
 const readinessMissingHealthJob = {
@@ -1263,6 +1382,15 @@ const unknownReadinessResponse = await server.inject({
 
 if (unknownReadinessResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job readiness review to return 404, got ${unknownReadinessResponse.statusCode}.`);
+}
+
+const unknownDryRunResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/adapter-dry-run/short-video-maker"
+});
+
+if (unknownDryRunResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job dry-run request to return 404, got ${unknownDryRunResponse.statusCode}.`);
 }
 
 const adapterHealthJob = {

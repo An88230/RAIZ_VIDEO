@@ -11,6 +11,7 @@ export type JobArtifactType =
   | "preflight_report"
   | "adapter_health"
   | "adapter_payload"
+  | "adapter_dry_run_request"
   | "output_dir"
   | "output_file";
 
@@ -35,6 +36,7 @@ export interface JobArtifactsInventory {
     has_preflight_report: boolean;
     has_adapter_health: boolean;
     has_short_video_maker_payload: boolean;
+    has_short_video_maker_dry_run_request: boolean;
     has_output: boolean;
   };
   created_at: string;
@@ -58,6 +60,11 @@ export async function inspectJobArtifacts(
     inspectArtifact("preflight-report.json", "preflight_report", paths.preflightReportPath),
     inspectArtifact("adapter-health.short-video-maker.json", "adapter_health", paths.shortVideoMakerAdapterHealthPath),
     inspectArtifact("short-video-maker-payload.json", "adapter_payload", paths.shortVideoMakerPayloadPath),
+    inspectArtifact(
+      "short-video-maker-request.dry-run.json",
+      "adapter_dry_run_request",
+      paths.shortVideoMakerDryRunRequestPath
+    ),
     inspectArtifact("output", "output_dir", paths.outputDir)
   ]);
   const outputArtifacts = await inspectOutputFiles(paths.outputDir);
@@ -75,6 +82,7 @@ export async function inspectJobArtifacts(
       has_preflight_report: artifactExists(artifacts, "preflight-report.json"),
       has_adapter_health: artifactExists(artifacts, "adapter-health.short-video-maker.json"),
       has_short_video_maker_payload: artifactExists(artifacts, "short-video-maker-payload.json"),
+      has_short_video_maker_dry_run_request: artifactExists(artifacts, "short-video-maker-request.dry-run.json"),
       has_output: artifactExists(artifacts, "output")
     },
     created_at: new Date().toISOString()

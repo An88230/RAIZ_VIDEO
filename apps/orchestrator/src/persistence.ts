@@ -53,6 +53,7 @@ export interface JobPaths {
   shortVideoMakerAdapterHealthPath: string;
   shortVideoMakerPayloadPath: string;
   readinessReviewPath: string;
+  shortVideoMakerDryRunRequestPath: string;
 }
 
 export class JobConflictError extends Error {
@@ -386,7 +387,8 @@ export function getJobPaths(jobId: string, options: PersistenceOptions = {}): Jo
     preflightReportPath: resolve(jobDir, "preflight-report.json"),
     shortVideoMakerAdapterHealthPath: resolve(jobDir, "adapter-health.short-video-maker.json"),
     shortVideoMakerPayloadPath: resolve(jobDir, "short-video-maker-payload.json"),
-    readinessReviewPath: resolve(jobDir, "readiness-review.json")
+    readinessReviewPath: resolve(jobDir, "readiness-review.json"),
+    shortVideoMakerDryRunRequestPath: resolve(jobDir, "short-video-maker-request.dry-run.json")
   };
 }
 
