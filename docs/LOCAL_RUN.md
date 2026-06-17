@@ -156,7 +156,18 @@ On success, the job remains `preparing`, `status.json` metadata receives `prefli
 
 If an error-level preflight check fails, the job moves from `preparing` to `failed`, `status.json` stores the error summary, and `events.ndjson` receives `job.preflight_failed`.
 
-Preflight does not require real media files yet. Assets are only summarized from the job and render plan.
+Preflight does not require real media files yet. Assets are summarized from the job and render plan.
+
+Phase 9 adds warning-only checks for declared local files and folders:
+
+```text
+local voice file
+local b-roll folder
+local music file
+local logo file
+```
+
+Missing local voice/assets are written to `warnings` in `preflight-report.json`, but preflight still passes if there are no error-level failures. The job remains `preparing` and `metadata.preflight_status` remains `passed`.
 
 ## Run Mock Render
 

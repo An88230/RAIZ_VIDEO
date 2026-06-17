@@ -122,9 +122,26 @@ Completed scope:
 - Payload creation does not change job status.
 - No short-video-maker call, render endpoint call, process start, Docker start, install, or video generation occurs.
 
+## Phase 9: Local Voice And Asset Warnings
+
+Goal: validate declared local voice and asset paths during preflight without making missing media fatal.
+
+Completed scope:
+
+- Preflight checks declared local external voice files.
+- Preflight checks declared local b-roll folders.
+- Preflight checks declared local music files.
+- Preflight checks declared local logo files.
+- Missing local media paths are warning-level checks only.
+- Warning-only preflight reports still pass.
+- Warning-only preflight keeps status `preparing`.
+- Warning-only preflight keeps `metadata.preflight_status: passed`.
+- Error-level preflight failures still move `preparing -> failed`.
+- No external asset resolution, Google Drive, render engine, Docker, or video generation occurs.
+
 One clear next task:
 
-Add local voice and asset path validation as warnings first, still without rendering.
+Add a read-only job artifact inspection endpoint that lists which files exist under `storage/jobs/{job_id}`.
 
 ## Later Phases
 
