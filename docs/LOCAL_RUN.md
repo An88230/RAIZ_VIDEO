@@ -128,6 +128,36 @@ job.render_plan_created
 
 Calling prepare again returns `409 conflict`. Unknown jobs return `404`.
 
+## Run Preflight
+
+Phase 5 validates render readiness without calling any render engine and without generating video.
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/preflight
+```
+
+This requires the job to be `preparing`. It reads:
+
+```text
+storage/jobs/smoke-arabic-001/job.json
+storage/jobs/smoke-arabic-001/status.json
+storage/jobs/smoke-arabic-001/render-plan.json
+```
+
+It creates:
+
+```text
+storage/jobs/smoke-arabic-001/preflight-report.json
+```
+
+On success, the job remains `preparing`, `status.json` metadata receives `preflight_report_path` and `preflight_status`, and `events.ndjson` receives `job.preflight_passed`.
+
+If an error-level preflight check fails, the job moves from `preparing` to `failed`, `status.json` stores the error summary, and `events.ndjson` receives `job.preflight_failed`.
+
+Preflight does not require real media files yet. Assets are only summarized from the job and render plan.
+
 ## Update Status Manually
 
 Phase 3 adds controlled lifecycle transitions for internal testing before real rendering.

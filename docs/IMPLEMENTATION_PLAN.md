@@ -59,6 +59,26 @@ One clear next task:
 
 Add asset and voice preflight checks inside the preparation layer without rendering.
 
+## Phase 5: Render Preflight
+
+Goal: validate that a prepared job has enough information to be rendered later, without calling any render engine.
+
+Completed scope:
+
+- `POST /jobs/:id/preflight` reads `job.json`, `status.json`, and `render-plan.json`.
+- Preflight requires current status `preparing`.
+- Preflight writes `storage/jobs/{job_id}/preflight-report.json`.
+- Passing preflight keeps status `preparing`.
+- Passing preflight updates status metadata with `preflight_report_path` and `preflight_status`.
+- Passing preflight appends `job.preflight_passed`.
+- Failed error checks move status from `preparing` to `failed`.
+- Failed preflight appends `job.preflight_failed`.
+- Preflight does not require real media files and does not generate video.
+
+One clear next task:
+
+Add local voice and asset path validation as warnings first, still without rendering.
+
 ## Later Phases
 
 - Add voice and caption services.

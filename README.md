@@ -2,7 +2,7 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 4 is intentionally small:
+Phase 5 is intentionally small:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
 - Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
@@ -11,6 +11,7 @@ Phase 4 is intentionally small:
 - Persist accepted render requests under `storage/jobs/{job_id}`.
 - Control job status transitions before real render execution.
 - Create deterministic render plans before calling any render engine.
+- Run render readiness preflight checks without generating video.
 
 ## Vendor Policy
 
@@ -36,7 +37,7 @@ samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
 
-## Phase 4 Commands
+## Phase 5 Commands
 
 ```bash
 npm install
@@ -52,6 +53,7 @@ Current endpoints:
 - `POST /jobs/validate`
 - `POST /jobs/render`
 - `POST /jobs/:id/prepare`
+- `POST /jobs/:id/preflight`
 - `GET /jobs/:id/status`
 - `PATCH /jobs/:id/status`
 
@@ -66,6 +68,8 @@ storage/jobs/{job_id}/events.ndjson
 ```
 
 `POST /jobs/:id/prepare` reads `job.json`, requires the job to be `queued`, writes `render-plan.json`, creates `output/.gitkeep`, and moves the job to `preparing`. It does not call a render adapter and does not generate video.
+
+`POST /jobs/:id/preflight` reads `job.json`, `status.json`, and `render-plan.json`, requires the job to be `preparing`, writes `preflight-report.json`, and records whether the job is ready for a future render call.
 
 Duplicate `job_id` values return `409 conflict` unless overwrite support is explicitly added later.
 
