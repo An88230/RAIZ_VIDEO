@@ -7,3 +7,4 @@ build/
 coverage/
 vendor/
 *.log
+storage/

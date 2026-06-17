@@ -1,0 +1,43 @@
+{
+  "job_id": "smoke-arabic-001",
+  "platform": "youtube_shorts",
+  "aspect_ratio": "9:16",
+  "resolution": {
+    "width": 1080,
+    "height": 1920
+  },
+  "language": "ar",
+  "direction": "rtl",
+  "title": "اختبار عربي",
+  "hook": "إنت مش تعبان... إنت مفرطن.",
+  "script": "أحيانًا لا يكون التعب من كثرة العمل، بل من كثرة الأشياء التي تطلب منك أن تكون أكثر من إنسان.",
+  "template": {
+    "engine": "short_video_maker",
+    "template_id": "raiz_dark_hook_01"
+  },
+  "voice": {
+    "type": "edge_tts",
+    "provider": "edge",
+    "voice_name": "ar-SA-HamedNeural"
+  },
+  "assets": {
+    "broll_source": "local",
+    "broll_folder": "/storage/assets/smoke",
+    "music": "/storage/audio/pulse-low.mp3"
+  },
+  "captions": {
+    "enabled": true,
+    "format": "ass",
+    "font": "Cairo-Bold",
+    "burn_in": true,
+    "position": "center"
+  },
+  "output": {
+    "drive_folder": "local",
+    "filename": "smoke-arabic-001.mp4"
+  },
+  "publish": {
+    "youtube": false,
+    "mode": "review_first"
+  }
+}

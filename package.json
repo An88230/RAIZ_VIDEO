@@ -1,0 +1,24 @@
+{
+  "name": "raiz-video",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RAIZ Video Factory phase 1 workspace.",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "dev:orchestrator": "npm --workspace @raiz/orchestrator run dev"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
