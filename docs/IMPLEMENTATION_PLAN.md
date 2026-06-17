@@ -153,9 +153,26 @@ Completed scope:
 - Artifact inspection does not append events.
 - Artifact inspection does not call adapters, render endpoints, Docker, or any external process.
 
+## Phase 11: Local Readiness Review
+
+Goal: decide whether a prepared job is ready for short-video-maker dry-run generation without executing any renderer.
+
+Completed scope:
+
+- `runReadinessReview(jobId)` reads the local job folder and required artifacts.
+- `POST /jobs/:id/readiness-review` writes `storage/jobs/{job_id}/readiness-review.json`.
+- Readiness requires status `preparing`.
+- Readiness verifies preflight metadata and `preflight-report.json` status are `passed`.
+- Readiness verifies adapter health is `healthy` or `degraded`; `missing` fails the gate.
+- Readiness verifies the short-video-maker payload is 9:16, 1080x1920, Arabic, and RTL.
+- Readiness verifies the payload output local path is declared and the output directory exists.
+- Passing readiness keeps status `preparing`, records `ready_for_dry_run: true`, and appends `job.readiness_passed`.
+- Failed readiness keeps status unchanged, records `ready_for_dry_run: false`, and appends `job.readiness_failed`.
+- Readiness does not call short-video-maker, call render endpoints, start Docker, install dependencies, or generate video.
+
 One clear next task:
 
-Add a final readiness review before real short-video-maker integration, using the stored render plan, preflight report, adapter health, and adapter payload as inputs.
+Add a dry-run request artifact for short-video-maker without sending it to the process.
 
 ## Later Phases
 

@@ -2,7 +2,7 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 10 is intentionally small:
+Phase 11 is intentionally small:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
 - Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
@@ -17,6 +17,7 @@ Phase 10 is intentionally small:
 - Create a deterministic `short_video_maker` payload artifact without sending it.
 - Validate declared local voice and asset paths as preflight warnings only.
 - Inspect generated job artifacts without changing job status or event history.
+- Run a local readiness review before any short-video-maker dry-run generation.
 
 ## Vendor Policy
 
@@ -42,7 +43,7 @@ samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
 
-## Phase 10 Commands
+## Phase 11 Commands
 
 ```bash
 npm install
@@ -63,6 +64,7 @@ Current endpoints:
 - `POST /jobs/:id/mock-render`
 - `POST /jobs/:id/adapter-health`
 - `POST /jobs/:id/adapter-payload/short-video-maker`
+- `POST /jobs/:id/readiness-review`
 - `GET /jobs/:id/artifacts`
 - `GET /jobs/:id/status`
 - `PATCH /jobs/:id/status`
@@ -90,6 +92,8 @@ Preflight also checks declared local voice and asset paths. Missing local voice 
 `POST /jobs/:id/adapter-health` writes `storage/jobs/{job_id}/adapter-health.short-video-maker.json` and appends `job.adapter_health_checked` without changing job status.
 
 `POST /jobs/:id/adapter-payload/short-video-maker` requires `status: preparing` and `preflight_status: passed`, writes `storage/jobs/{job_id}/short-video-maker-payload.json`, appends `job.adapter_payload_created`, and leaves job status unchanged.
+
+`POST /jobs/:id/readiness-review` requires the job to remain `preparing`, checks the required local artifacts, verifies preflight, adapter health, short-video-maker payload composition, and output directory readiness, then writes `storage/jobs/{job_id}/readiness-review.json`. It updates readiness metadata and appends either `job.readiness_passed` or `job.readiness_failed`, but it does not call short-video-maker and does not generate video.
 
 `GET /jobs/:id/artifacts` returns a read-only inventory of known files under `storage/jobs/{job_id}` including job payload, status, events, render plan, preflight report, adapter health, adapter payload, output directory, and output files. It does not change `status.json`, append events, create files, call adapters, or render video.
 

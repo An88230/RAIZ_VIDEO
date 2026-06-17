@@ -286,6 +286,30 @@ The job remains `preparing`. `status.json` receives `metadata.short_video_maker_
 
 Calling this before preflight returns `409 conflict`. Unknown jobs return `404`.
 
+## Run Readiness Review
+
+Phase 11 creates a local gate before generating any short-video-maker dry-run request. It does not call `short-video-maker`, does not call a render endpoint, and does not generate video.
+
+Run this after `render`, `prepare`, passing `preflight`, `adapter-health`, and `adapter-payload`:
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/readiness-review
+```
+
+This creates:
+
+```text
+storage/jobs/smoke-arabic-001/readiness-review.json
+```
+
+Readiness passes only when required artifacts exist, status is `preparing`, preflight has passed, adapter health is `healthy` or `degraded`, the short-video-maker payload is Arabic RTL 9:16 at 1080x1920, and the output directory exists.
+
+The job remains `preparing`. `status.json` receives `metadata.readiness_review_path`, `metadata.readiness_status`, and `metadata.ready_for_dry_run`. `events.ndjson` receives `job.readiness_passed` or `job.readiness_failed`.
+
+Missing adapter health, missing payload, bad payload composition, or missing output directory fail readiness without moving the job to `failed`. Unknown jobs return `404`; jobs that are not `preparing` return `409 conflict`.
+
 ## Inspect Job Artifacts
 
 Phase 10 adds a read-only inventory endpoint for files under `storage/jobs/{job_id}`.
