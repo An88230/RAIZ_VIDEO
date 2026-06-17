@@ -2,17 +2,17 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { validateRaizJob } from "@raiz/job-schema";
 import { shortVideoMakerAdapter } from "@raiz/render-adapters";
 
-import { JobStore } from "./jobStore.js";
+import { createJobRecord, getJobStatus, JobConflictError, JobNotFoundError } from "./persistence.js";
 
 export interface CreateServerOptions {
   logger?: boolean;
+  storageRoot?: string;
 }
 
 const renderAdapters = [shortVideoMakerAdapter];
 
 export function createServer(options: CreateServerOptions = {}): FastifyInstance {
   const server = Fastify({ logger: options.logger ?? false });
-  const jobStore = new JobStore();
 
   server.post("/jobs/validate", async (request, reply) => {
     const validation = validateRaizJob(request.body);
@@ -50,23 +50,43 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
     }
 
     const prepared = await adapter.prepare(validation.job);
-    const renderResult = await adapter.render(prepared);
-    const storedJob = jobStore.queue(validation.job, renderResult.logs);
+    await adapter.render(prepared);
 
-    return reply.code(202).send(storedJob);
+    try {
+      const status = await createJobRecord(validation.job, {
+        storageRoot: options.storageRoot,
+        adapter: adapter.id
+      });
+
+      return reply.code(202).send(status);
+    } catch (error) {
+      if (error instanceof JobConflictError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: validation.job.job_id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
   });
 
   server.get<{ Params: { id: string } }>("/jobs/:id/status", async (request, reply) => {
-    const storedJob = jobStore.get(request.params.id);
-
-    if (!storedJob) {
-      return reply.code(404).send({
-        status: "not_found",
-        job_id: request.params.id
+    try {
+      return await getJobStatus(request.params.id, {
+        storageRoot: options.storageRoot
       });
-    }
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
 
-    return storedJob;
+      throw error;
+    }
   });
 
   return server;

@@ -7,4 +7,6 @@ build/
 coverage/
 vendor/
 *.log
-storage/
+storage/*
+!storage/.gitkeep
+storage/jobs/
