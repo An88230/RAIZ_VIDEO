@@ -3,6 +3,7 @@ import { validateRaizJob } from "@raiz/job-schema";
 import { shortVideoMakerAdapter } from "@raiz/render-adapters";
 import { resolve } from "node:path";
 
+import { inspectJobArtifacts } from "./artifactInspector.js";
 import {
   createShortVideoMakerPayload,
   createJobRecord,
@@ -109,6 +110,23 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
   server.get<{ Params: { id: string } }>("/jobs/:id/status", async (request, reply) => {
     try {
       return await getJobStatus(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.get<{ Params: { id: string } }>("/jobs/:id/artifacts", async (request, reply) => {
+    try {
+      return await inspectJobArtifacts(request.params.id, {
         storageRoot: options.storageRoot
       });
     } catch (error) {

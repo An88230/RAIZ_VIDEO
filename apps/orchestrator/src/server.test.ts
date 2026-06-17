@@ -11,6 +11,20 @@ const sampleJob = JSON.parse(readFileSync(samplePath, "utf8")) as Record<string,
 const storageRoot = mkdtempSync(resolve(tmpdir(), "raiz-orchestrator-test-"));
 const server = createServer({ storageRoot });
 
+interface ArtifactInventoryBody {
+  artifacts?: Array<{ name?: string; type?: string; exists?: boolean }>;
+  summary?: {
+    total_artifacts?: number;
+    has_job?: boolean;
+    has_status?: boolean;
+    has_render_plan?: boolean;
+    has_preflight_report?: boolean;
+    has_adapter_health?: boolean;
+    has_short_video_maker_payload?: boolean;
+    has_output?: boolean;
+  };
+}
+
 const validateResponse = await server.inject({
   method: "POST",
   url: "/jobs/validate",
@@ -103,6 +117,36 @@ const events = readFileSync(resolve(jobDir, "events.ndjson"), "utf8")
 
 if (events.length !== 1 || events[0]?.type !== "job.queued" || events[0]?.job_id !== sampleJob.job_id) {
   throw new Error("Expected one job.queued event.");
+}
+
+const statusBeforeArtifacts = readFileSync(resolve(jobDir, "status.json"), "utf8");
+const eventsBeforeArtifacts = readFileSync(resolve(jobDir, "events.ndjson"), "utf8");
+const renderArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${sampleJob.job_id}/artifacts`
+});
+
+if (renderArtifactsResponse.statusCode !== 200) {
+  throw new Error(`Expected artifacts endpoint to work after render, got ${renderArtifactsResponse.statusCode}.`);
+}
+
+const renderArtifacts = JSON.parse(renderArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  renderArtifacts.summary?.has_job !== true ||
+  renderArtifacts.summary.has_status !== true ||
+  !renderArtifacts.artifacts?.some((artifact) => artifact.name === "job.json" && artifact.type === "job_payload" && artifact.exists) ||
+  !renderArtifacts.artifacts.some((artifact) => artifact.name === "status.json" && artifact.type === "job_status" && artifact.exists) ||
+  !renderArtifacts.artifacts.some((artifact) => artifact.name === "events.ndjson" && artifact.type === "event_log" && artifact.exists)
+) {
+  throw new Error("Expected artifacts endpoint to detect job.json, status.json, and events.ndjson.");
+}
+
+if (
+  readFileSync(resolve(jobDir, "status.json"), "utf8") !== statusBeforeArtifacts ||
+  readFileSync(resolve(jobDir, "events.ndjson"), "utf8") !== eventsBeforeArtifacts
+) {
+  throw new Error("Expected artifacts endpoint to be read-only for status.json and events.ndjson.");
 }
 
 const duplicateResponse = await server.inject({
@@ -313,6 +357,25 @@ if (!existsSync(resolve(prepareJobDir, "output", ".gitkeep"))) {
   throw new Error("Expected prepare endpoint to create output/.gitkeep.");
 }
 
+const preparedArtifactsResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/artifacts"
+});
+
+if (preparedArtifactsResponse.statusCode !== 200) {
+  throw new Error(`Expected artifacts endpoint to work after prepare, got ${preparedArtifactsResponse.statusCode}.`);
+}
+
+const preparedArtifacts = JSON.parse(preparedArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  preparedArtifacts.summary?.has_render_plan !== true ||
+  preparedArtifacts.summary.has_output !== true ||
+  !preparedArtifacts.artifacts?.some((artifact) => artifact.name === "render-plan.json" && artifact.type === "render_plan" && artifact.exists)
+) {
+  throw new Error("Expected artifacts endpoint to detect render-plan.json after prepare.");
+}
+
 const renderPlan = JSON.parse(readFileSync(resolve(prepareJobDir, "render-plan.json"), "utf8")) as {
   width?: number;
   height?: number;
@@ -390,6 +453,26 @@ if (!existsSync(resolve(prepareJobDir, "preflight-report.json"))) {
   throw new Error("Expected preflight to create preflight-report.json.");
 }
 
+const preflightArtifactsResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/artifacts"
+});
+
+if (preflightArtifactsResponse.statusCode !== 200) {
+  throw new Error(`Expected artifacts endpoint to work after preflight, got ${preflightArtifactsResponse.statusCode}.`);
+}
+
+const preflightArtifacts = JSON.parse(preflightArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  preflightArtifacts.summary?.has_preflight_report !== true ||
+  !preflightArtifacts.artifacts?.some(
+    (artifact) => artifact.name === "preflight-report.json" && artifact.type === "preflight_report" && artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect preflight-report.json after preflight.");
+}
+
 const preflightEvents = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8")
   .trim()
   .split("\n")
@@ -429,6 +512,27 @@ const shortVideoMakerPayloadPath = resolve(prepareJobDir, "short-video-maker-pay
 
 if (!existsSync(shortVideoMakerPayloadPath)) {
   throw new Error("Expected adapter payload endpoint to create short-video-maker-payload.json.");
+}
+
+const adapterPayloadArtifactsResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/artifacts"
+});
+
+if (adapterPayloadArtifactsResponse.statusCode !== 200) {
+  throw new Error(`Expected artifacts endpoint to work after adapter payload, got ${adapterPayloadArtifactsResponse.statusCode}.`);
+}
+
+const adapterPayloadArtifacts = JSON.parse(adapterPayloadArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  adapterPayloadArtifacts.summary?.has_short_video_maker_payload !== true ||
+  !adapterPayloadArtifacts.artifacts?.some(
+    (artifact) =>
+      artifact.name === "short-video-maker-payload.json" && artifact.type === "adapter_payload" && artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect short-video-maker-payload.json after adapter payload creation.");
 }
 
 const shortVideoMakerPayload = JSON.parse(readFileSync(shortVideoMakerPayloadPath, "utf8")) as {
@@ -522,6 +626,29 @@ if (
 
 if (!existsSync(mockOutputPath)) {
   throw new Error("Expected mock render output artifact to be created.");
+}
+
+const mockRenderArtifactsResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/artifacts"
+});
+
+if (mockRenderArtifactsResponse.statusCode !== 200) {
+  throw new Error(`Expected artifacts endpoint to work after mock render, got ${mockRenderArtifactsResponse.statusCode}.`);
+}
+
+const mockRenderArtifacts = JSON.parse(mockRenderArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  mockRenderArtifacts.summary?.has_output !== true ||
+  !mockRenderArtifacts.artifacts?.some(
+    (artifact) =>
+      artifact.name === "output/smoke-arabic-prepare-001.mock-render.txt" &&
+      artifact.type === "output_file" &&
+      artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect mock output artifact after mock render.");
 }
 
 const mockOutput = readFileSync(mockOutputPath, "utf8");
@@ -911,6 +1038,15 @@ const unknownStatusResponse = await server.inject({
 
 if (unknownStatusResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job status to return 404, got ${unknownStatusResponse.statusCode}.`);
+}
+
+const unknownArtifactsResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/unknown-job/artifacts"
+});
+
+if (unknownArtifactsResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job artifacts to return 404, got ${unknownArtifactsResponse.statusCode}.`);
 }
 
 const unknownPatchResponse = await server.inject({
