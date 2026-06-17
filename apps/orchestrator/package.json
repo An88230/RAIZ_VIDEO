@@ -1,0 +1,19 @@
+{
+  "name": "@raiz/orchestrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "tsx src/server.test.ts"
+  },
+  "dependencies": {
+    "@raiz/job-schema": "0.1.0",
+    "@raiz/render-adapters": "0.1.0",
+    "fastify": "^5.2.1"
+  }
+}
