@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nabil88.art/schemas/raiz-job.schema.json",
+  "title": "RAIZ Video Factory Job Schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "job_id",
+    "platform",
+    "aspect_ratio",
+    "resolution",
+    "language",
+    "direction",
+    "title",
+    "script",
+    "template",
+    "voice",
+    "captions",
+    "output",
+    "publish"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["youtube_shorts", "instagram_reels", "tiktok", "local_only"]
+    },
+    "aspect_ratio": {
+      "type": "string",
+      "enum": ["9:16"]
+    },
+    "resolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "const": 1080 },
+        "height": { "type": "integer", "const": 1920 }
+      }
+    },
+    "language": {
+      "type": "string",
+      "enum": ["ar", "en"]
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["rtl", "ltr"]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hook": {
+      "type": "string"
+    },
+    "script": {
+      "type": "string",
+      "minLength": 1
+    },
+    "template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "template_id"],
+      "properties": {
+        "engine": {
+          "type": "string",
+          "enum": ["short_video_maker", "remotion_direct", "money_printer_turbo", "editly", "ffmpeg_only"]
+        },
+        "template_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style_preset": {
+          "type": "string"
+        }
+      }
+    },
+    "voice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["external_file", "edge_tts", "elevenlabs", "azure", "none"]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "voice_name": {
+          "type": "string"
+        },
+        "file_path": {
+          "type": "string"
+        }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "broll_source": {
+          "type": "string",
+          "enum": ["google_drive", "local", "pexels", "pixabay", "none"]
+        },
+        "broll_folder": {
+          "type": "string"
+        },
+        "music": {
+          "type": "string"
+        },
+        "logo": {
+          "type": "string"
+        }
+      }
+    },
+    "captions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "format", "burn_in"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["srt", "ass", "none"]
+        },
+        "font": {
+          "type": "string"
+        },
+        "burn_in": {
+          "type": "boolean"
+        },
+        "position": {
+          "type": "string",
+          "enum": ["top", "center", "bottom"]
+        },
+        "style_preset": {
+          "type": "string"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename"],
+      "properties": {
+        "drive_folder": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string",
+          "pattern": "^[^/\\\\]+\\.mp4$"
+        }
+      }
+    },
+    "publish": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["youtube", "mode"],
+      "properties": {
+        "youtube": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["review_first", "private", "scheduled", "manual_only"]
+        },
+        "scheduled_time": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}
