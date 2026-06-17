@@ -5,7 +5,15 @@ import { fileURLToPath } from "node:url";
 
 import type { RaizJob } from "./types.js";
 
-export type { RaizJob } from "./types.js";
+export type {
+  RaizCaptionFormat,
+  RaizCaptionPosition,
+  RaizJob,
+  RaizPlatform,
+  RaizPublishMode,
+  RaizTemplateEngine,
+  RaizVoiceType
+} from "./types.js";
 
 export interface RaizJobValidationIssue {
   path: string;

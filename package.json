@@ -5,8 +5,8 @@
   "description": "RAIZ Video Factory phase 1 workspace.",
   "type": "module",
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
