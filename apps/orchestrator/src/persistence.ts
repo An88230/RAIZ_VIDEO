@@ -117,12 +117,12 @@ export async function updateJobStatus(
     updated_at: timestamp
   };
 
-  if ("output_path" in options) {
-    nextStatusRecord.output_path = options.output_path ?? null;
+  if (options.output_path !== undefined) {
+    nextStatusRecord.output_path = options.output_path;
   }
 
-  if ("error" in options) {
-    nextStatusRecord.error = options.error ?? null;
+  if (options.error !== undefined) {
+    nextStatusRecord.error = options.error;
   }
 
   if (options.metadata !== undefined) {
