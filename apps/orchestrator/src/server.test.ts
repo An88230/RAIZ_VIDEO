@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -340,6 +340,163 @@ if (duplicatePrepareResponse.statusCode !== 409) {
   throw new Error(`Expected preparing the same job twice to return 409, got ${duplicatePrepareResponse.statusCode}.`);
 }
 
+const preflightResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/preflight"
+});
+
+if (preflightResponse.statusCode !== 200) {
+  throw new Error(`Expected preflight to pass for prepared Arabic job, got ${preflightResponse.statusCode}.`);
+}
+
+const preflightReport = JSON.parse(preflightResponse.body) as {
+  status?: string;
+  checks?: Array<{ name?: string; passed?: boolean }>;
+};
+
+if (
+  preflightReport.status !== "passed" ||
+  !preflightReport.checks?.some((check) => check.name === "arabic_direction" && check.passed)
+) {
+  throw new Error("Expected preflight report to pass Arabic RTL checks.");
+}
+
+if (!existsSync(resolve(prepareJobDir, "preflight-report.json"))) {
+  throw new Error("Expected preflight to create preflight-report.json.");
+}
+
+const preflightEvents = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!preflightEvents.some((event) => event.type === "job.preflight_passed")) {
+  throw new Error("Expected preflight to append job.preflight_passed event.");
+}
+
+const preflightStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/status"
+});
+const preflightStatus = JSON.parse(preflightStatusResponse.body) as {
+  status?: string;
+  metadata?: { preflight_report_path?: string; preflight_status?: string };
+};
+
+if (
+  preflightStatus.status !== "preparing" ||
+  preflightStatus.metadata?.preflight_status !== "passed" ||
+  preflightStatus.metadata?.preflight_report_path !== resolve(prepareJobDir, "preflight-report.json")
+) {
+  throw new Error("Expected preflight to keep status preparing and update status metadata.");
+}
+
+const queuedPreflightJob = {
+  ...sampleJob,
+  job_id: "smoke-arabic-preflight-queued-001",
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-preflight-queued-001.mp4"
+  }
+};
+
+const queuedPreflightRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: queuedPreflightJob
+});
+
+if (queuedPreflightRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected queued preflight test job to queue, got ${queuedPreflightRenderResponse.statusCode}.`);
+}
+
+const queuedPreflightResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-preflight-queued-001/preflight"
+});
+
+if (queuedPreflightResponse.statusCode !== 409) {
+  throw new Error(`Expected preflight for queued job to return 409, got ${queuedPreflightResponse.statusCode}.`);
+}
+
+const brokenPreflightJob = {
+  ...sampleJob,
+  job_id: "smoke-arabic-preflight-broken-001",
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-preflight-broken-001.mp4"
+  }
+};
+
+const brokenPreflightRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: brokenPreflightJob
+});
+
+if (brokenPreflightRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected broken preflight job to queue, got ${brokenPreflightRenderResponse.statusCode}.`);
+}
+
+const brokenPrepareResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-preflight-broken-001/prepare"
+});
+
+if (brokenPrepareResponse.statusCode !== 200) {
+  throw new Error(`Expected broken preflight job to prepare, got ${brokenPrepareResponse.statusCode}.`);
+}
+
+const brokenJobDir = resolve(storageRoot, "jobs", "smoke-arabic-preflight-broken-001");
+const brokenRenderPlan = JSON.parse(readFileSync(resolve(brokenJobDir, "render-plan.json"), "utf8")) as Record<
+  string,
+  unknown
+>;
+writeFileSync(resolve(brokenJobDir, "render-plan.json"), `${JSON.stringify({ ...brokenRenderPlan, direction: "ltr" }, null, 2)}\n`);
+
+const brokenPreflightResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-preflight-broken-001/preflight"
+});
+
+if (brokenPreflightResponse.statusCode !== 200) {
+  throw new Error(`Expected broken preflight to return report, got ${brokenPreflightResponse.statusCode}.`);
+}
+
+const brokenPreflightReport = JSON.parse(brokenPreflightResponse.body) as {
+  status?: string;
+  checks?: Array<{ name?: string; passed?: boolean }>;
+};
+
+if (
+  brokenPreflightReport.status !== "failed" ||
+  !brokenPreflightReport.checks?.some((check) => check.name === "arabic_direction" && !check.passed)
+) {
+  throw new Error("Expected non-RTL render plan to fail preflight.");
+}
+
+const brokenStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-preflight-broken-001/status"
+});
+const brokenStatus = JSON.parse(brokenStatusResponse.body) as { status?: string; error?: string | null };
+
+if (brokenStatus.status !== "failed" || !brokenStatus.error?.includes("Direction is RTL.")) {
+  throw new Error("Expected failed preflight to move job from preparing to failed with error summary.");
+}
+
+const brokenEvents = readFileSync(resolve(brokenJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; from?: string; to?: string });
+
+if (
+  !brokenEvents.some((event) => event.type === "job.status_changed" && event.from === "preparing" && event.to === "failed") ||
+  !brokenEvents.some((event) => event.type === "job.preflight_failed")
+) {
+  throw new Error("Expected failed preflight to use preparing -> failed transition and append event.");
+}
+
 const unknownPrepareResponse = await server.inject({
   method: "POST",
   url: "/jobs/unknown-job/prepare"
@@ -347,6 +504,15 @@ const unknownPrepareResponse = await server.inject({
 
 if (unknownPrepareResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job prepare to return 404, got ${unknownPrepareResponse.statusCode}.`);
+}
+
+const unknownPreflightResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/preflight"
+});
+
+if (unknownPreflightResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job preflight to return 404, got ${unknownPreflightResponse.statusCode}.`);
 }
 
 const unknownStatusResponse = await server.inject({

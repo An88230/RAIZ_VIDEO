@@ -36,6 +36,16 @@ export interface UpdateJobStatusOptions extends PersistenceOptions {
   metadata?: Record<string, unknown>;
 }
 
+export interface JobPaths {
+  jobDir: string;
+  jobPath: string;
+  statusPath: string;
+  eventsPath: string;
+  renderPlanPath: string;
+  outputDir: string;
+  preflightReportPath: string;
+}
+
 export class JobConflictError extends Error {
   constructor(jobId: string) {
     super(`Job ${jobId} already exists.`);
@@ -88,7 +98,7 @@ export async function createJobRecord(job: RaizJob, options: PersistenceOptions 
 }
 
 export async function getJobStatus(jobId: string, options: PersistenceOptions = {}): Promise<JobStatusRecord> {
-  const statusPath = resolve(getJobDir(jobId, options), "status.json");
+  const statusPath = getJobPaths(jobId, options).statusPath;
 
   try {
     const rawStatus = await readFile(statusPath, "utf8");
@@ -102,26 +112,43 @@ export async function getJobStatus(jobId: string, options: PersistenceOptions = 
   }
 }
 
+export async function updateJobMetadata(
+  jobId: string,
+  metadata: Record<string, unknown>,
+  options: PersistenceOptions = {}
+): Promise<JobStatusRecord> {
+  const currentStatus = await getJobStatus(jobId, options);
+  const nextStatusRecord: JobStatusRecord = {
+    ...currentStatus,
+    updated_at: new Date().toISOString(),
+    metadata: {
+      ...(currentStatus.metadata ?? {}),
+      ...metadata
+    }
+  };
+
+  await writeFile(getJobPaths(jobId, options).statusPath, `${JSON.stringify(nextStatusRecord, null, 2)}\n`);
+  return nextStatusRecord;
+}
+
 export async function prepareJob(jobId: string, options: PersistenceOptions = {}): Promise<RenderPlan> {
   const currentStatus = await getJobStatus(jobId, options);
   assertValidStatusTransition(currentStatus.status, "preparing");
 
   const job = await getStoredJob(jobId, options);
-  const jobDir = getJobDir(jobId, options);
-  const outputDir = resolve(jobDir, "output");
-  const renderPlanPath = resolve(jobDir, "render-plan.json");
+  const paths = getJobPaths(jobId, options);
   const renderPlan = prepareRenderPlan(job, {
-    outputLocalPath: resolve(outputDir, job.output.filename)
+    outputLocalPath: resolve(paths.outputDir, job.output.filename)
   });
 
-  await mkdir(outputDir, { recursive: true });
-  await writeFile(resolve(outputDir, ".gitkeep"), "");
-  await writeFile(resolve(renderPlanPath, ""), `${JSON.stringify(renderPlan, null, 2)}\n`, { flag: "wx" });
+  await mkdir(paths.outputDir, { recursive: true });
+  await writeFile(resolve(paths.outputDir, ".gitkeep"), "");
+  await writeFile(paths.renderPlanPath, `${JSON.stringify(renderPlan, null, 2)}\n`, { flag: "wx" });
 
   const metadata = {
     ...(currentStatus.metadata ?? {}),
-    render_plan_path: renderPlanPath,
-    output_dir: outputDir
+    render_plan_path: paths.renderPlanPath,
+    output_dir: paths.outputDir
   };
 
   await updateJobStatus(jobId, "preparing", {
@@ -133,8 +160,8 @@ export async function prepareJob(jobId: string, options: PersistenceOptions = {}
     jobId,
     {
       type: "job.render_plan_created",
-      render_plan_path: renderPlanPath,
-      output_dir: outputDir
+      render_plan_path: paths.renderPlanPath,
+      output_dir: paths.outputDir
     },
     options
   );
@@ -187,12 +214,27 @@ export async function updateJobStatus(
   return nextStatusRecord;
 }
 
-async function getStoredJob(jobId: string, options: PersistenceOptions): Promise<RaizJob> {
-  const jobPath = resolve(getJobDir(jobId, options), "job.json");
+export async function getStoredJob(jobId: string, options: PersistenceOptions = {}): Promise<RaizJob> {
+  const jobPath = getJobPaths(jobId, options).jobPath;
 
   try {
     const rawJob = await readFile(jobPath, "utf8");
     return JSON.parse(rawJob) as RaizJob;
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      throw new JobNotFoundError(jobId);
+    }
+
+    throw error;
+  }
+}
+
+export async function getStoredRenderPlan(jobId: string, options: PersistenceOptions = {}): Promise<RenderPlan> {
+  const renderPlanPath = getJobPaths(jobId, options).renderPlanPath;
+
+  try {
+    const rawPlan = await readFile(renderPlanPath, "utf8");
+    return JSON.parse(rawPlan) as RenderPlan;
   } catch (error) {
     if (isNodeError(error) && error.code === "ENOENT") {
       throw new JobNotFoundError(jobId);
@@ -215,6 +257,20 @@ export async function appendJobEvent(
   };
 
   await appendFile(resolve(jobDir, "events.ndjson"), `${JSON.stringify(timestampedEvent)}\n`);
+}
+
+export function getJobPaths(jobId: string, options: PersistenceOptions = {}): JobPaths {
+  const jobDir = getJobDir(jobId, options);
+
+  return {
+    jobDir,
+    jobPath: resolve(jobDir, "job.json"),
+    statusPath: resolve(jobDir, "status.json"),
+    eventsPath: resolve(jobDir, "events.ndjson"),
+    renderPlanPath: resolve(jobDir, "render-plan.json"),
+    outputDir: resolve(jobDir, "output"),
+    preflightReportPath: resolve(jobDir, "preflight-report.json")
+  };
 }
 
 function getJobDir(jobId: string, options: PersistenceOptions): string {
