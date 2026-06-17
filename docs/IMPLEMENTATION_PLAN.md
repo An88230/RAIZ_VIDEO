@@ -106,6 +106,22 @@ Completed scope:
 - Job adapter health does not change job status.
 - No install, Docker start, process start, render endpoint call, or real render occurs.
 
+## Phase 8: short-video-maker Payload Artifact
+
+Goal: convert a prepared RAIZ render plan into a deterministic short-video-maker payload artifact before any real adapter execution.
+
+Completed scope:
+
+- `mapToShortVideoMakerPayload(input)` creates a conservative internal adapter contract.
+- `POST /jobs/:id/adapter-payload/short-video-maker` reads `job.json`, `status.json`, `render-plan.json`, and `preflight-report.json`.
+- Payload creation requires current status `preparing`.
+- Payload creation requires `metadata.preflight_status: passed`.
+- Payload creation writes `storage/jobs/{job_id}/short-video-maker-payload.json`.
+- Payload creation updates status metadata with `short_video_maker_payload_path`.
+- Payload creation appends `job.adapter_payload_created`.
+- Payload creation does not change job status.
+- No short-video-maker call, render endpoint call, process start, Docker start, install, or video generation occurs.
+
 One clear next task:
 
 Add local voice and asset path validation as warnings first, still without rendering.

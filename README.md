@@ -2,7 +2,7 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 7 is intentionally small:
+Phase 8 is intentionally small:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
 - Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
@@ -14,6 +14,7 @@ Phase 7 is intentionally small:
 - Run render readiness preflight checks without generating video.
 - Prove the full local lifecycle with a mock render artifact.
 - Inspect the upstream `short-video-maker` adapter presence without running it.
+- Create a deterministic `short_video_maker` payload artifact without sending it.
 
 ## Vendor Policy
 
@@ -39,7 +40,7 @@ samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
 
-## Phase 7 Commands
+## Phase 8 Commands
 
 ```bash
 npm install
@@ -59,6 +60,7 @@ Current endpoints:
 - `POST /jobs/:id/preflight`
 - `POST /jobs/:id/mock-render`
 - `POST /jobs/:id/adapter-health`
+- `POST /jobs/:id/adapter-payload/short-video-maker`
 - `GET /jobs/:id/status`
 - `PATCH /jobs/:id/status`
 
@@ -81,6 +83,8 @@ storage/jobs/{job_id}/events.ndjson
 `GET /adapters/short-video-maker/health` inspects `vendor/short-video-maker` for expected reference files. It does not install dependencies, start Docker, call short-video-maker, or render anything.
 
 `POST /jobs/:id/adapter-health` writes `storage/jobs/{job_id}/adapter-health.short-video-maker.json` and appends `job.adapter_health_checked` without changing job status.
+
+`POST /jobs/:id/adapter-payload/short-video-maker` requires `status: preparing` and `preflight_status: passed`, writes `storage/jobs/{job_id}/short-video-maker-payload.json`, appends `job.adapter_payload_created`, and leaves job status unchanged.
 
 Duplicate `job_id` values return `409 conflict` unless overwrite support is explicitly added later.
 

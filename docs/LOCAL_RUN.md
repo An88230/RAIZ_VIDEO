@@ -241,6 +241,40 @@ The event log receives:
 job.adapter_health_checked
 ```
 
+## Create short-video-maker Payload
+
+Phase 8 creates a deterministic adapter payload artifact. It does not call `short-video-maker`, does not call any render endpoint, and does not generate video.
+
+Run this after `render`, `prepare`, and passing `preflight`:
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/adapter-payload/short-video-maker
+```
+
+This creates:
+
+```text
+storage/jobs/smoke-arabic-001/short-video-maker-payload.json
+```
+
+The payload includes:
+
+```text
+composition: 9:16, 1080x1920, ar, rtl
+script: title, text, hook
+voice: provider, voice_name
+captions: enabled, format, burn_in
+assets: summary, declared
+output: filename, local_path
+metadata: source, engine, created_at
+```
+
+The job remains `preparing`. `status.json` receives `metadata.short_video_maker_payload_path`, and `events.ndjson` receives `job.adapter_payload_created`.
+
+Calling this before preflight returns `409 conflict`. Unknown jobs return `404`.
+
 ## Update Status Manually
 
 Phase 3 adds controlled lifecycle transitions for internal testing before real rendering.
