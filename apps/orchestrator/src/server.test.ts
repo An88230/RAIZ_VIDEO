@@ -31,6 +31,31 @@ if (invalidResponse.statusCode !== 400) {
   throw new Error(`Expected invalid job to fail validation, got ${invalidResponse.statusCode}.`);
 }
 
+const adapterHealthResponse = await server.inject({
+  method: "GET",
+  url: "/adapters/short-video-maker/health"
+});
+
+if (adapterHealthResponse.statusCode !== 200) {
+  throw new Error(`Expected short-video-maker health endpoint to return 200, got ${adapterHealthResponse.statusCode}.`);
+}
+
+const adapterHealth = JSON.parse(adapterHealthResponse.body) as {
+  adapter?: string;
+  status?: string;
+  checks?: unknown[];
+  metadata?: { package_name?: string | null; detected_files?: string[] };
+};
+
+if (
+  adapterHealth.adapter !== "short_video_maker" ||
+  !["healthy", "degraded", "missing"].includes(adapterHealth.status ?? "") ||
+  !Array.isArray(adapterHealth.checks) ||
+  !Array.isArray(adapterHealth.metadata?.detected_files)
+) {
+  throw new Error("Expected short-video-maker health endpoint to return a structured health report.");
+}
+
 const renderResponse = await server.inject({
   method: "POST",
   url: "/jobs/render",
@@ -613,6 +638,78 @@ const unknownMockRenderResponse = await server.inject({
 
 if (unknownMockRenderResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job mock render to return 404, got ${unknownMockRenderResponse.statusCode}.`);
+}
+
+const adapterHealthJob = {
+  ...sampleJob,
+  job_id: "smoke-arabic-adapter-health-001",
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-adapter-health-001.mp4"
+  }
+};
+
+const adapterHealthRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: adapterHealthJob
+});
+
+if (adapterHealthRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected adapter-health job to queue, got ${adapterHealthRenderResponse.statusCode}.`);
+}
+
+const adapterHealthJobStatusBefore = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-adapter-health-001/status"
+});
+const adapterHealthJobStatusBeforeBody = JSON.parse(adapterHealthJobStatusBefore.body) as { status?: string };
+
+const jobAdapterHealthResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-adapter-health-001/adapter-health"
+});
+
+if (jobAdapterHealthResponse.statusCode !== 200) {
+  throw new Error(`Expected job adapter-health endpoint to return 200, got ${jobAdapterHealthResponse.statusCode}.`);
+}
+
+const adapterHealthJobDir = resolve(storageRoot, "jobs", "smoke-arabic-adapter-health-001");
+const adapterHealthReportPath = resolve(adapterHealthJobDir, "adapter-health.short-video-maker.json");
+
+if (!existsSync(adapterHealthReportPath)) {
+  throw new Error("Expected job adapter-health endpoint to write adapter health report file.");
+}
+
+const savedAdapterHealthReport = JSON.parse(readFileSync(adapterHealthReportPath, "utf8")) as {
+  adapter?: string;
+  status?: string;
+};
+
+if (savedAdapterHealthReport.adapter !== "short_video_maker" || !savedAdapterHealthReport.status) {
+  throw new Error("Expected saved adapter health report to include adapter status.");
+}
+
+const adapterHealthEvents = readFileSync(resolve(adapterHealthJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; adapter?: string });
+
+if (!adapterHealthEvents.some((event) => event.type === "job.adapter_health_checked" && event.adapter === "short_video_maker")) {
+  throw new Error("Expected job adapter-health endpoint to append adapter health event.");
+}
+
+const adapterHealthJobStatusAfter = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-adapter-health-001/status"
+});
+const adapterHealthJobStatusAfterBody = JSON.parse(adapterHealthJobStatusAfter.body) as { status?: string };
+
+if (
+  adapterHealthJobStatusBeforeBody.status !== "queued" ||
+  adapterHealthJobStatusAfterBody.status !== adapterHealthJobStatusBeforeBody.status
+) {
+  throw new Error("Expected job adapter-health endpoint to leave job status unchanged.");
 }
 
 const unknownStatusResponse = await server.inject({

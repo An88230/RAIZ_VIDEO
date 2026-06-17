@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { validateRaizJob } from "@raiz/job-schema";
 import { shortVideoMakerAdapter } from "@raiz/render-adapters";
+import { resolve } from "node:path";
 
 import {
   createJobRecord,
@@ -8,7 +9,8 @@ import {
   JobConflictError,
   JobNotFoundError,
   prepareJob,
-  updateJobStatus
+  updateJobStatus,
+  writeJobAdapterHealthReport
 } from "./persistence.js";
 import { JobMockRenderPreflightError, JobMockRenderStateError, runMockRender } from "./mockRender.js";
 import { JobPreflightStateError, runPreflight } from "./preflight.js";
@@ -17,9 +19,14 @@ import { InvalidStatusTransitionError, isLocalJobStatus } from "./statusTransiti
 export interface CreateServerOptions {
   logger?: boolean;
   storageRoot?: string;
+  shortVideoMakerVendorPath?: string;
 }
 
 const renderAdapters = [shortVideoMakerAdapter];
+
+function getShortVideoMakerVendorPath(options: CreateServerOptions): string {
+  return resolve(options.shortVideoMakerVendorPath ?? "vendor/short-video-maker");
+}
 
 interface PatchJobStatusBody {
   status?: unknown;
@@ -31,6 +38,12 @@ interface PatchJobStatusBody {
 
 export function createServer(options: CreateServerOptions = {}): FastifyInstance {
   const server = Fastify({ logger: options.logger ?? false });
+
+  server.get("/adapters/short-video-maker/health", async () => {
+    return shortVideoMakerAdapter.checkHealth?.({
+      vendorPath: getShortVideoMakerVendorPath(options)
+    });
+  });
 
   server.post("/jobs/validate", async (request, reply) => {
     const validation = validateRaizJob(request.body);
@@ -183,6 +196,33 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
           status: "conflict",
           job_id: request.params.id,
           error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/adapter-health", async (request, reply) => {
+    try {
+      const report = await shortVideoMakerAdapter.checkHealth?.({
+        vendorPath: getShortVideoMakerVendorPath(options)
+      });
+
+      if (!report) {
+        throw new Error("short-video-maker adapter does not expose health checks.");
+      }
+
+      await writeJobAdapterHealthReport(request.params.id, report, {
+        storageRoot: options.storageRoot
+      });
+
+      return report;
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
         });
       }
 

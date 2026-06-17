@@ -1,4 +1,5 @@
 import type { RaizJob } from "@raiz/job-schema";
+import type { AdapterHealthReport } from "@raiz/render-adapters";
 import { constants } from "node:fs";
 import { access, appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -44,6 +45,7 @@ export interface JobPaths {
   renderPlanPath: string;
   outputDir: string;
   preflightReportPath: string;
+  shortVideoMakerAdapterHealthPath: string;
 }
 
 export class JobConflictError extends Error {
@@ -129,6 +131,27 @@ export async function updateJobMetadata(
 
   await writeFile(getJobPaths(jobId, options).statusPath, `${JSON.stringify(nextStatusRecord, null, 2)}\n`);
   return nextStatusRecord;
+}
+
+export async function writeJobAdapterHealthReport(
+  jobId: string,
+  report: AdapterHealthReport,
+  options: PersistenceOptions = {}
+): Promise<void> {
+  await getJobStatus(jobId, options);
+  const paths = getJobPaths(jobId, options);
+
+  await writeFile(paths.shortVideoMakerAdapterHealthPath, `${JSON.stringify(report, null, 2)}\n`);
+  await appendJobEvent(
+    jobId,
+    {
+      type: "job.adapter_health_checked",
+      adapter: "short_video_maker",
+      report_path: paths.shortVideoMakerAdapterHealthPath,
+      health_status: report.status
+    },
+    options
+  );
 }
 
 export async function prepareJob(jobId: string, options: PersistenceOptions = {}): Promise<RenderPlan> {
@@ -269,7 +292,8 @@ export function getJobPaths(jobId: string, options: PersistenceOptions = {}): Jo
     eventsPath: resolve(jobDir, "events.ndjson"),
     renderPlanPath: resolve(jobDir, "render-plan.json"),
     outputDir: resolve(jobDir, "output"),
-    preflightReportPath: resolve(jobDir, "preflight-report.json")
+    preflightReportPath: resolve(jobDir, "preflight-report.json"),
+    shortVideoMakerAdapterHealthPath: resolve(jobDir, "adapter-health.short-video-maker.json")
   };
 }
 
