@@ -197,6 +197,50 @@ This is a mock render artifact. No video was generated.
 
 Calling mock render before passing preflight returns `409 conflict`. Unknown jobs return `404`.
 
+## Check short-video-maker Adapter Health
+
+Phase 7 inspects the reference checkout at `vendor/short-video-maker` without installing, running Docker, starting a process, calling a render endpoint, or generating video.
+
+```bash
+curl -s http://localhost:4000/adapters/short-video-maker/health
+```
+
+The response includes:
+
+```json
+{
+  "adapter": "short_video_maker",
+  "status": "healthy",
+  "vendor_path": "/absolute/path/vendor/short-video-maker",
+  "checks": [],
+  "metadata": {
+    "package_name": "short-video-maker",
+    "package_version": "1.3.4",
+    "detected_files": []
+  }
+}
+```
+
+To attach the same report to a job without changing its status:
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/adapter-health
+```
+
+This creates:
+
+```text
+storage/jobs/smoke-arabic-001/adapter-health.short-video-maker.json
+```
+
+The event log receives:
+
+```text
+job.adapter_health_checked
+```
+
 ## Update Status Manually
 
 Phase 3 adds controlled lifecycle transitions for internal testing before real rendering.

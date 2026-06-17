@@ -90,6 +90,22 @@ Completed scope:
 - Mock render appends `job.mock_render_started` and `job.mock_render_completed`.
 - Mock render does not call a render engine and does not generate video.
 
+## Phase 7: short-video-maker Health Check
+
+Goal: verify that RAIZ can inspect the upstream short-video-maker dependency before attempting a real integration.
+
+Completed scope:
+
+- `short_video_maker` adapter exposes `checkHealth({ vendorPath })`.
+- Health check verifies vendor path existence.
+- Health check reads `package.json` when present.
+- Health check reports expected reference files such as `README.md`, Dockerfile variants, and compose files.
+- `GET /adapters/short-video-maker/health` returns a structured health report.
+- `POST /jobs/:id/adapter-health` writes `storage/jobs/{job_id}/adapter-health.short-video-maker.json`.
+- Job adapter health appends `job.adapter_health_checked`.
+- Job adapter health does not change job status.
+- No install, Docker start, process start, render endpoint call, or real render occurs.
+
 One clear next task:
 
 Add local voice and asset path validation as warnings first, still without rendering.
