@@ -577,6 +577,101 @@ if (queuedPreflightResponse.statusCode !== 409) {
   throw new Error(`Expected preflight for queued job to return 409, got ${queuedPreflightResponse.statusCode}.`);
 }
 
+const warningOnlyPreflightJob = {
+  ...sampleJob,
+  job_id: "smoke-arabic-preflight-warnings-001",
+  voice: {
+    type: "external_file",
+    provider: "external_file",
+    voice_name: "local-voice-test",
+    file_path: resolve(storageRoot, "missing-voice.wav")
+  },
+  assets: {
+    broll_source: "local",
+    broll_folder: resolve(storageRoot, "missing-broll"),
+    music: resolve(storageRoot, "missing-music.mp3")
+  },
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "smoke-arabic-preflight-warnings-001.mp4"
+  }
+};
+
+const warningOnlyRenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: warningOnlyPreflightJob
+});
+
+if (warningOnlyRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected warning-only preflight job to queue, got ${warningOnlyRenderResponse.statusCode}.`);
+}
+
+const warningOnlyPrepareResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-preflight-warnings-001/prepare"
+});
+
+if (warningOnlyPrepareResponse.statusCode !== 200) {
+  throw new Error(`Expected warning-only preflight job to prepare, got ${warningOnlyPrepareResponse.statusCode}.`);
+}
+
+const warningOnlyPreflightResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-preflight-warnings-001/preflight"
+});
+
+if (warningOnlyPreflightResponse.statusCode !== 200) {
+  throw new Error(`Expected warning-only preflight to return 200, got ${warningOnlyPreflightResponse.statusCode}.`);
+}
+
+const warningOnlyReport = JSON.parse(warningOnlyPreflightResponse.body) as {
+  status?: string;
+  warnings?: string[];
+  checks?: Array<{ name?: string; passed?: boolean; severity?: string }>;
+};
+const warningOnlyWarnings = warningOnlyReport.warnings ?? [];
+const warningOnlyChecks = warningOnlyReport.checks ?? [];
+
+if (
+  warningOnlyReport.status !== "passed" ||
+  !warningOnlyWarnings.includes("Local voice file is declared but was not found.") ||
+  !warningOnlyWarnings.includes("Local b-roll folder is declared but was not found.") ||
+  !warningOnlyWarnings.includes("Local music file is declared but was not found.") ||
+  !warningOnlyChecks.some((check) => check.name === "local_voice_file_exists" && !check.passed && check.severity === "warning") ||
+  !warningOnlyChecks.some((check) => check.name === "local_broll_folder_exists" && !check.passed && check.severity === "warning") ||
+  !warningOnlyChecks.some((check) => check.name === "local_music_file_exists" && !check.passed && check.severity === "warning")
+) {
+  throw new Error("Expected missing local voice, b-roll, and music paths to produce warning-only preflight pass.");
+}
+
+const warningOnlyJobDir = resolve(storageRoot, "jobs", "smoke-arabic-preflight-warnings-001");
+
+if (!existsSync(resolve(warningOnlyJobDir, "preflight-report.json"))) {
+  throw new Error("Expected warning-only preflight to write preflight-report.json.");
+}
+
+const savedWarningOnlyReport = JSON.parse(readFileSync(resolve(warningOnlyJobDir, "preflight-report.json"), "utf8")) as {
+  warnings?: string[];
+};
+
+if (!savedWarningOnlyReport.warnings || savedWarningOnlyReport.warnings.length < 3) {
+  throw new Error("Expected warning-only preflight-report.json to include warnings array.");
+}
+
+const warningOnlyStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-preflight-warnings-001/status"
+});
+const warningOnlyStatus = JSON.parse(warningOnlyStatusResponse.body) as {
+  status?: string;
+  metadata?: { preflight_status?: string };
+};
+
+if (warningOnlyStatus.status !== "preparing" || warningOnlyStatus.metadata?.preflight_status !== "passed") {
+  throw new Error("Expected warning-only preflight to keep job preparing with passed metadata.");
+}
+
 const mockBeforePreflightJob = {
   ...sampleJob,
   job_id: "smoke-arabic-mock-before-preflight-001",

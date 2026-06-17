@@ -3,6 +3,7 @@ import { access, writeFile } from "node:fs/promises";
 import type { RaizJob } from "@raiz/job-schema";
 
 import type { RenderPlan } from "./renderPlan.js";
+import { runLocalPathWarningChecks } from "./localPathChecks.js";
 import {
   appendJobEvent,
   getJobPaths,
@@ -50,7 +51,7 @@ export async function runPreflight(jobId: string, options: PersistenceOptions = 
 
   const [job, renderPlan] = await Promise.all([getStoredJob(jobId, options), getStoredRenderPlan(jobId, options)]);
   const outputDirectoryExists = await pathExists(paths.outputDir);
-  const checks = buildChecks(job, renderPlan, outputDirectoryExists);
+  const checks = await buildChecks(job, renderPlan, outputDirectoryExists);
   const errors = checks
     .filter((check) => check.severity === "error" && !check.passed)
     .map((check) => check.message);
@@ -111,8 +112,8 @@ export async function runPreflight(jobId: string, options: PersistenceOptions = 
   return report;
 }
 
-function buildChecks(job: RaizJob, renderPlan: RenderPlan, outputDirectoryExists: boolean): PreflightCheck[] {
-  return [
+async function buildChecks(job: RaizJob, renderPlan: RenderPlan, outputDirectoryExists: boolean): Promise<PreflightCheck[]> {
+  const baseChecks = [
     errorCheck("job_id_exists", Boolean(job.job_id && renderPlan.job_id), "Job id exists."),
     errorCheck("script_exists", Boolean(job.script?.trim()), "Script text exists."),
     errorCheck("aspect_ratio", job.aspect_ratio === "9:16" && renderPlan.aspect_ratio === "9:16", "Aspect ratio is 9:16."),
@@ -128,6 +129,9 @@ function buildChecks(job: RaizJob, renderPlan: RenderPlan, outputDirectoryExists
     errorCheck("output_directory_exists", outputDirectoryExists, "Output directory exists."),
     warningCheck("assets_declared", hasDeclaredAsset(job, renderPlan), "Assets declaration is present when available.")
   ];
+  const localPathChecks = await runLocalPathWarningChecks(job, renderPlan);
+
+  return [...baseChecks, ...localPathChecks];
 }
 
 function errorCheck(name: string, passed: boolean, message: string): PreflightCheck {
