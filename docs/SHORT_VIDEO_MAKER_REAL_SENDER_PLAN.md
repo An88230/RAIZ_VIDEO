@@ -17,6 +17,7 @@ POST /jobs/:id/readiness-review
 POST /jobs/:id/adapter-dry-run/short-video-maker
 POST /jobs/:id/http-send-plan/short-video-maker
 POST /jobs/:id/http-send-mock/short-video-maker
+POST /jobs/:id/real-http-sender-readiness
 GET /system/execution-guard
 GET /system/config
 POST /jobs/:id/send-to-short-video-maker
@@ -34,6 +35,8 @@ Phase 16 also creates `short-video-maker-http-send.plan.json`, a planned-only HT
 
 Phase 17 validates the HTTP sender contract through an injected mocked HTTP client only. It writes `short-video-maker-response.mock.json` when `RAIZ_ENABLE_REAL_RENDER=true`, but it still does not use global fetch, make a real network request, call `short-video-maker`, start Docker, or generate video.
 
+Phase 18 adds `real-http-sender-readiness.json` as the final local checklist before any real HTTP sender. It validates artifacts, metadata, config, the HTTP plan, and the mocked response without changing job status or making network requests.
+
 ## 2. Execution Safety Gates
 
 Every future real sender implementation must pass all gates before any real execution:
@@ -47,6 +50,9 @@ Every future real sender implementation must pass all gates before any real exec
 - `storage/jobs/{job_id}/short-video-maker-request.dry-run.json` must exist.
 - `storage/jobs/{job_id}/short-video-maker-http-send.plan.json` should exist for audited HTTP execution planning.
 - `storage/jobs/{job_id}/short-video-maker-response.mock.json` may exist from Phase 17 contract validation, but it is not proof of real upstream execution.
+- `storage/jobs/{job_id}/real-http-sender-readiness.json` must pass before a future real HTTP sender can execute.
+- `metadata.real_http_sender_readiness_status` must be `passed`.
+- `metadata.ready_for_real_http_sender` must be `true`.
 - Adapter health must be `healthy` or `degraded`.
 - `vendor/` must remain read-only.
 - No `npm install` inside `vendor/`.
@@ -178,6 +184,7 @@ Future sender files:
 ```text
 storage/jobs/{job_id}/short-video-maker-http-send.plan.json
 storage/jobs/{job_id}/short-video-maker-response.mock.json
+storage/jobs/{job_id}/real-http-sender-readiness.json
 storage/jobs/{job_id}/short-video-maker-request.sent.json
 storage/jobs/{job_id}/short-video-maker-response.json
 storage/jobs/{job_id}/short-video-maker-error.json
@@ -187,6 +194,7 @@ Rules:
 
 - `short-video-maker-http-send.plan.json` records the planned HTTP request only and must set `will_make_network_request: false`.
 - `short-video-maker-response.mock.json` records Phase 17 mocked HTTP validation only and must not be treated as a real upstream response.
+- `real-http-sender-readiness.json` records Phase 18 local readiness and must pass before real HTTP execution.
 - `short-video-maker-request.sent.json` records the exact outbound request.
 - `short-video-maker-response.json` records a successful upstream response.
 - `short-video-maker-error.json` records a failed attempt, timeout, invalid response, or upstream error.
@@ -257,4 +265,7 @@ Phase 17:
 Implemented mocked HTTP sender contract validation with injected HTTP client only.
 
 Phase 18:
+Implemented real HTTP sender readiness checklist.
+
+Phase 19:
 Implement real HTTP sender behind `RAIZ_ENABLE_REAL_RENDER=true`.

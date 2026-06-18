@@ -286,9 +286,28 @@ Completed scope:
 - Tests verify the injected mock client is called exactly once and global fetch is not used.
 - No real network request is made, no short-video-maker process is called, no render endpoint is called, no Docker process is started, no dependencies are installed, and no video is generated.
 
+## Phase 18: Real HTTP Sender Readiness Checklist
+
+Goal: add a local readiness gate before any real HTTP sender implementation.
+
+Completed scope:
+
+- Added `runRealHttpSenderReadinessChecklist(jobId)`.
+- `POST /jobs/:id/real-http-sender-readiness` reads required local artifacts through the mocked HTTP response.
+- Real HTTP sender readiness requires status `preparing`; non-preparing jobs return `409 conflict`.
+- The checklist validates required metadata: dry-run readiness, dry-run request creation, HTTP send plan creation, mocked HTTP send completion, and readiness status.
+- The checklist validates config: mode `http`, base URL present, and positive timeout.
+- The checklist validates HTTP plan safety: `planned_only`, network disabled, `POST`, URL present, and body source path exists.
+- The checklist validates mocked response safety: `mode: http_mock` and `metadata.mocked: true`.
+- Passing readiness writes `storage/jobs/{job_id}/real-http-sender-readiness.json`.
+- Passing readiness keeps status unchanged, records `ready_for_real_http_sender: true`, and appends `job.real_http_sender_readiness_passed`.
+- Failed readiness writes the same report path, keeps status unchanged, records `ready_for_real_http_sender: false`, and appends `job.real_http_sender_readiness_failed`.
+- Artifact inspection detects `real-http-sender-readiness.json`.
+- No real network request is made, no short-video-maker process is called, no render endpoint is called, no Docker process is started, no dependencies are installed, and no video is generated.
+
 One clear next task:
 
-Implement the real HTTP sender behind `RAIZ_ENABLE_REAL_RENDER=true`, using the planned and mocked contracts while keeping all safety gates in place.
+Implement the real HTTP sender behind `RAIZ_ENABLE_REAL_RENDER=true`, using the readiness checklist as the final local gate.
 
 ## Later Phases
 

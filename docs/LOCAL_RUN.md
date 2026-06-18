@@ -492,6 +492,42 @@ The job remains `preparing`. `status.json` receives `metadata.short_video_maker_
 
 Calling this before `short-video-maker-http-send.plan.json` exists returns `409 conflict`. Unknown jobs return `404`.
 
+## Run Real HTTP Sender Readiness Checklist
+
+Phase 18 adds a local gate before any real HTTP sender implementation. It reads the required artifacts through the mocked HTTP response, validates config, validates the planned HTTP request, and writes a checklist report. It does not call `short-video-maker`, does not make a network request, does not start Docker, does not change job status, and does not generate video.
+
+Run this after the mocked HTTP sender succeeds:
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/real-http-sender-readiness
+```
+
+This creates:
+
+```text
+storage/jobs/smoke-arabic-001/real-http-sender-readiness.json
+```
+
+On pass, `status.json` receives:
+
+```text
+metadata.real_http_sender_readiness_status: passed
+metadata.ready_for_real_http_sender: true
+metadata.real_http_sender_readiness_path: storage/jobs/{job_id}/real-http-sender-readiness.json
+```
+
+The event log receives:
+
+```text
+job.real_http_sender_readiness_passed
+```
+
+If required artifacts such as `short-video-maker-http-send.plan.json` or `short-video-maker-response.mock.json` are missing, the endpoint writes a failed checklist, keeps job status unchanged, sets `ready_for_real_http_sender: false`, and appends `job.real_http_sender_readiness_failed`.
+
+Jobs that are not `preparing` return `409 conflict`. Unknown jobs return `404`.
+
 ## Inspect Job Artifacts
 
 Phase 10 adds a read-only inventory endpoint for files under `storage/jobs/{job_id}`.
@@ -513,6 +549,7 @@ short-video-maker-payload.json
 short-video-maker-request.dry-run.json
 short-video-maker-http-send.plan.json
 short-video-maker-response.mock.json
+real-http-sender-readiness.json
 output/
 output files
 ```
