@@ -305,9 +305,29 @@ Completed scope:
 - Artifact inspection detects `real-http-sender-readiness.json`.
 - No real network request is made, no short-video-maker process is called, no render endpoint is called, no Docker process is started, no dependencies are installed, and no video is generated.
 
+## Phase 19: Guarded Real HTTP Sender
+
+Goal: implement the real HTTP submit contract behind `RAIZ_ENABLE_REAL_RENDER=true`, with tests using mocked network only.
+
+Completed scope:
+
+- Added `sendShortVideoMakerWithRealHttp(jobId, httpClient)`.
+- `POST /jobs/:id/send-to-short-video-maker` now uses the guarded real HTTP sender instead of the old 501 stub.
+- The sender requires `status: preparing`.
+- The sender requires passed `real-http-sender-readiness.json` and readiness metadata.
+- The sender calls `assertRealRenderAllowed()` before any HTTP submit.
+- The sender uses the existing `short-video-maker-http-send.plan.json` URL, headers, timeout, and body source.
+- The sender writes `short-video-maker-request.sent.json` before the attempted submit.
+- On successful submit, the sender writes `short-video-maker-response.json`.
+- On successful submit, the sender transitions `preparing -> rendering`.
+- On attempted HTTP failure, the sender writes `short-video-maker-error.json` and transitions `preparing -> failed`.
+- Tests inject a mocked HTTP client and verify exactly one POST call.
+- Artifact inspection detects sent request, response, and error artifacts.
+- No Docker process is started, no vendor files are modified, no YouTube or Drive integration is added, no n8n workflow is added, and no video is generated.
+
 One clear next task:
 
-Implement the real HTTP sender behind `RAIZ_ENABLE_REAL_RENDER=true`, using the readiness checklist as the final local gate.
+Add a render-result polling or completion check that can move `rendering -> rendered` only after a verified output artifact exists.
 
 ## Later Phases
 

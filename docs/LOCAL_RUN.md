@@ -354,11 +354,11 @@ Only this exact value enables the guard state:
 RAIZ_ENABLE_REAL_RENDER=true
 ```
 
-Even when enabled, Phase 13 does not send anything and does not implement real rendering.
+Real HTTP submission remains blocked unless the full readiness pipeline has passed and `RAIZ_ENABLE_REAL_RENDER=true` is set.
 
-## Try Protected Sender Stub
+## Submit To short-video-maker Over HTTP
 
-The protected sender reads the dry-run request artifact and validates local readiness, but it is still a stub.
+Phase 19 implements the guarded HTTP sender. It uses the existing HTTP send plan and makes one `POST` to the planned URL only when `RAIZ_ENABLE_REAL_RENDER=true`.
 
 ```bash
 curl -i \
@@ -374,13 +374,28 @@ With the guard explicitly enabled:
 RAIZ_ENABLE_REAL_RENDER=true npm run dev:orchestrator
 ```
 
-The same request returns `501 Not Implemented`:
+The same request submits one HTTP `POST` using `short-video-maker-http-send.plan.json`. On successful submit it creates:
 
 ```text
-Real short-video-maker sender is not implemented yet.
+storage/jobs/smoke-arabic-001/short-video-maker-request.sent.json
+storage/jobs/smoke-arabic-001/short-video-maker-response.json
 ```
 
-This phase proves the safety lock only. It still does not execute, send, render, install, or start Docker.
+Then the job transitions:
+
+```text
+preparing -> rendering
+```
+
+If the attempted HTTP submit fails, the sender writes:
+
+```text
+storage/jobs/smoke-arabic-001/short-video-maker-error.json
+```
+
+and moves the job to `failed`. Failures before an attempted request, such as missing readiness or a disabled guard, do not submit anything.
+
+Tests use an injected mocked HTTP client. Real network use is manual only. The sender does not start Docker, mutate `vendor/`, upload to YouTube or Drive, run n8n, or generate video.
 
 ## Real Sender Plan
 
@@ -550,6 +565,9 @@ short-video-maker-request.dry-run.json
 short-video-maker-http-send.plan.json
 short-video-maker-response.mock.json
 real-http-sender-readiness.json
+short-video-maker-request.sent.json
+short-video-maker-response.json
+short-video-maker-error.json
 output/
 output files
 ```

@@ -2,7 +2,7 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 18 is intentionally small:
+Phase 19 is intentionally small:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
 - Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
@@ -25,6 +25,7 @@ Phase 18 is intentionally small:
 - Create a planned HTTP sender artifact without making network requests.
 - Validate the HTTP sender contract with injectable mocked HTTP only.
 - Run a real HTTP sender readiness checklist before any real network execution.
+- Submit one guarded real HTTP request when explicitly enabled.
 
 ## Vendor Policy
 
@@ -50,7 +51,7 @@ samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
 
-## Phase 18 Commands
+## Phase 19 Commands
 
 ```bash
 npm install
@@ -121,11 +122,11 @@ Preflight also checks declared local voice and asset paths. Missing local voice 
 
 `GET /system/config` returns a safe view of centralized runtime config. It includes the real render flag, short-video-maker HTTP mode settings, vendor path, storage directory, and safety markers. It does not expose secrets, start processes, call the network, or alter storage.
 
-`POST /jobs/:id/send-to-short-video-maker` is a protected sender stub. With the default guard it returns `403` and does not modify status or events. With `RAIZ_ENABLE_REAL_RENDER=true`, Phase 13 still returns `501 Not Implemented`; it does not call short-video-maker, start a process, or generate video.
+`POST /jobs/:id/send-to-short-video-maker` is the guarded real HTTP sender. It requires `RAIZ_ENABLE_REAL_RENDER=true`, `status: preparing`, and passed real HTTP sender readiness. It writes `short-video-maker-request.sent.json` and `short-video-maker-response.json`, then moves the job `preparing -> rendering` only after a successful submit. If an attempted submit fails, it writes `short-video-maker-error.json` and moves the job to `failed`. It does not start Docker, mutate `vendor/`, upload anywhere, or generate video.
 
-The real sender plan is documented in [SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md](docs/SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md). Phase 18 adds a local readiness checklist before any real HTTP sender; it still does not implement real execution.
+The real sender plan is documented in [SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md](docs/SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md). Phase 19 implements the guarded HTTP submit path. Tests inject a mocked HTTP client; real network use is manual only.
 
-`GET /jobs/:id/artifacts` returns a read-only inventory of known files under `storage/jobs/{job_id}` including job payload, status, events, render plan, preflight report, adapter health, adapter payload, dry-run request, HTTP send plan, mocked HTTP response, real HTTP sender readiness, output directory, and output files. It does not change `status.json`, append events, create files, call adapters, or render video.
+`GET /jobs/:id/artifacts` returns a read-only inventory of known files under `storage/jobs/{job_id}` including job payload, status, events, render plan, preflight report, adapter health, adapter payload, dry-run request, HTTP send plan, mocked HTTP response, real HTTP sender readiness, sent request, real response, error artifact, output directory, and output files. It does not change `status.json`, append events, create files, call adapters, or render video.
 
 Execution guard values:
 

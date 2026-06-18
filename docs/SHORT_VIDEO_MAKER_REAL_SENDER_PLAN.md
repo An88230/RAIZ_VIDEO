@@ -37,6 +37,8 @@ Phase 17 validates the HTTP sender contract through an injected mocked HTTP clie
 
 Phase 18 adds `real-http-sender-readiness.json` as the final local checklist before any real HTTP sender. It validates artifacts, metadata, config, the HTTP plan, and the mocked response without changing job status or making network requests.
 
+Phase 19 implements the guarded HTTP sender. It makes one `POST` to the planned URL only when `RAIZ_ENABLE_REAL_RENDER=true`, writes sent request and response artifacts, and moves the job to `rendering` only after a successful submit.
+
 ## 2. Execution Safety Gates
 
 Every future real sender implementation must pass all gates before any real execution:
@@ -268,4 +270,7 @@ Phase 18:
 Implemented real HTTP sender readiness checklist.
 
 Phase 19:
-Implement real HTTP sender behind `RAIZ_ENABLE_REAL_RENDER=true`.
+Implemented guarded real HTTP sender behind `RAIZ_ENABLE_REAL_RENDER=true`.
+
+Phase 20:
+Implement render-result polling or completion verification for `rendering -> rendered`.
