@@ -28,7 +28,41 @@ const samplePath = resolve(currentDir, "../../../samples/valid-arabic-9x16-job.j
 const shortVideoMakerVendorPath = resolve(currentDir, "../../../vendor/short-video-maker");
 const sampleJob = JSON.parse(readFileSync(samplePath, "utf8")) as Record<string, unknown>;
 const storageRoot = mkdtempSync(resolve(tmpdir(), "raiz-orchestrator-test-"));
-const server = createServer({ storageRoot, shortVideoMakerVendorPath });
+let realHttpClientCalls = 0;
+let realHttpClientMode: "success" | "failure" = "success";
+const realHttpClient: HttpClient = {
+  async post(url, body, options) {
+    realHttpClientCalls += 1;
+
+    if (
+      url !== "http://localhost:3123/render" ||
+      !body ||
+      options?.timeoutMs !== 120000 ||
+      options.headers?.["content-type"] !== "application/json"
+    ) {
+      throw new Error("Expected real HTTP sender to use deterministic HTTP send plan details.");
+    }
+
+    if (realHttpClientMode === "failure") {
+      return {
+        status: 503,
+        ok: false,
+        body: {
+          error: "mock upstream unavailable"
+        }
+      };
+    }
+
+    return {
+      status: 202,
+      ok: true,
+      body: {
+        external_job_id: "mock-real-http-submit"
+      }
+    };
+  }
+};
+const server = createServer({ storageRoot, shortVideoMakerVendorPath, shortVideoMakerHttpClient: realHttpClient });
 
 const defaultEnvConfig = loadEnvConfig();
 
@@ -140,6 +174,9 @@ interface ArtifactInventoryBody {
     has_short_video_maker_http_send_plan?: boolean;
     has_short_video_maker_mock_response?: boolean;
     has_real_http_sender_readiness?: boolean;
+    has_short_video_maker_sent_request?: boolean;
+    has_short_video_maker_response?: boolean;
+    has_short_video_maker_error?: boolean;
     has_output?: boolean;
   };
 }
@@ -196,6 +233,16 @@ interface RealHttpSenderReadinessBody {
   status?: string;
   checks?: Array<{ name?: string; passed?: boolean; severity?: string }>;
   errors?: string[];
+}
+
+interface ShortVideoMakerRealHttpResponseBody {
+  adapter?: string;
+  mode?: string;
+  status?: string;
+  http_status?: number;
+  external_job_id?: string | null;
+  request_path?: string;
+  response_body?: unknown;
 }
 
 const validateResponse = await server.inject({
@@ -1356,31 +1403,136 @@ if (
   throw new Error("Expected blocked sender to leave status.json and events.ndjson unchanged.");
 }
 
+const realSendJobId = "smoke-arabic-real-send-001";
+const realSendJobDir = await createJobThroughRealHttpSenderReadiness(realSendJobId);
+const realHttpCallsBeforeSend = realHttpClientCalls;
 process.env.RAIZ_ENABLE_REAL_RENDER = "true";
 const enabledSendResponse = await server.inject({
   method: "POST",
-  url: "/jobs/smoke-arabic-prepare-001/send-to-short-video-maker"
+  url: `/jobs/${realSendJobId}/send-to-short-video-maker`
 });
 delete process.env.RAIZ_ENABLE_REAL_RENDER;
 
-if (enabledSendResponse.statusCode !== 501) {
-  throw new Error(`Expected enabled sender stub to return 501, got ${enabledSendResponse.statusCode}.`);
+if (enabledSendResponse.statusCode !== 200) {
+  throw new Error(`Expected enabled real HTTP sender to return 200, got ${enabledSendResponse.statusCode}.`);
 }
 
-const enabledSendBody = JSON.parse(enabledSendResponse.body) as { message?: string; status?: string };
-
-if (
-  enabledSendBody.status !== "not_implemented" ||
-  enabledSendBody.message !== "Real short-video-maker sender is not implemented yet."
-) {
-  throw new Error("Expected enabled sender stub to report not implemented without execution.");
+if (realHttpClientCalls !== realHttpCallsBeforeSend + 1) {
+  throw new Error("Expected real HTTP sender to call injected HTTP client exactly once.");
 }
 
+const enabledSendBody = JSON.parse(enabledSendResponse.body) as ShortVideoMakerRealHttpResponseBody;
+const realSentRequestPath = resolve(realSendJobDir, "short-video-maker-request.sent.json");
+const realResponsePath = resolve(realSendJobDir, "short-video-maker-response.json");
+
 if (
-  readFileSync(resolve(prepareJobDir, "status.json"), "utf8") !== statusBeforeBlockedSend ||
-  readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8") !== eventsBeforeBlockedSend
+  enabledSendBody.adapter !== "short_video_maker" ||
+  enabledSendBody.mode !== "http" ||
+  enabledSendBody.status !== "submitted" ||
+  enabledSendBody.http_status !== 202 ||
+  enabledSendBody.external_job_id !== "mock-real-http-submit" ||
+  enabledSendBody.request_path !== realSentRequestPath
 ) {
-  throw new Error("Expected enabled sender stub to leave status.json and events.ndjson unchanged.");
+  throw new Error("Expected enabled real HTTP sender to return submitted response contract.");
+}
+
+if (!existsSync(realSentRequestPath) || !existsSync(realResponsePath)) {
+  throw new Error("Expected real HTTP sender to create sent request and response artifacts.");
+}
+
+const realSendStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/status`
+});
+const realSendStatus = JSON.parse(realSendStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    short_video_maker_sent_request_path?: string;
+    short_video_maker_response_path?: string;
+    real_http_send_submitted?: boolean;
+    external_job_id?: string;
+  };
+};
+
+if (
+  realSendStatus.status !== "rendering" ||
+  realSendStatus.metadata?.short_video_maker_sent_request_path !== realSentRequestPath ||
+  realSendStatus.metadata.short_video_maker_response_path !== realResponsePath ||
+  realSendStatus.metadata.real_http_send_submitted !== true ||
+  realSendStatus.metadata.external_job_id !== "mock-real-http-submit"
+) {
+  throw new Error("Expected successful real HTTP sender to transition preparing -> rendering with response metadata.");
+}
+
+const realSendEvents = readFileSync(resolve(realSendJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; from?: string; to?: string; adapter?: string });
+
+if (
+  !realSendEvents.some((event) => event.type === "job.status_changed" && event.from === "preparing" && event.to === "rendering") ||
+  !realSendEvents.some((event) => event.type === "job.real_http_send_submitted" && event.adapter === "short_video_maker")
+) {
+  throw new Error("Expected successful real HTTP sender to append rendering transition and submitted event.");
+}
+
+const realSendArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/artifacts`
+});
+const realSendArtifacts = JSON.parse(realSendArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  realSendArtifacts.summary?.has_short_video_maker_sent_request !== true ||
+  realSendArtifacts.summary.has_short_video_maker_response !== true ||
+  !realSendArtifacts.artifacts?.some(
+    (artifact) =>
+      artifact.name === "short-video-maker-request.sent.json" &&
+      artifact.type === "adapter_sent_request" &&
+      artifact.exists
+  ) ||
+  !realSendArtifacts.artifacts.some(
+    (artifact) =>
+      artifact.name === "short-video-maker-response.json" && artifact.type === "adapter_response" && artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect real HTTP sent request and response artifacts.");
+}
+
+const realSendFailureJobId = "smoke-arabic-real-send-failure-001";
+const realSendFailureJobDir = await createJobThroughRealHttpSenderReadiness(realSendFailureJobId);
+realHttpClientMode = "failure";
+process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+const failedRealSendResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realSendFailureJobId}/send-to-short-video-maker`
+});
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
+realHttpClientMode = "success";
+
+if (failedRealSendResponse.statusCode !== 502) {
+  throw new Error(`Expected failed real HTTP sender to return 502, got ${failedRealSendResponse.statusCode}.`);
+}
+
+const realSendFailureStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendFailureJobId}/status`
+});
+const realSendFailureStatus = JSON.parse(realSendFailureStatusResponse.body) as {
+  status?: string;
+  error?: string | null;
+  metadata?: { short_video_maker_error_path?: string; real_http_send_failed?: boolean };
+};
+const realSendErrorPath = resolve(realSendFailureJobDir, "short-video-maker-error.json");
+
+if (
+  realSendFailureStatus.status !== "failed" ||
+  !realSendFailureStatus.error?.includes("HTTP submit failed") ||
+  realSendFailureStatus.metadata?.short_video_maker_error_path !== realSendErrorPath ||
+  realSendFailureStatus.metadata.real_http_send_failed !== true ||
+  !existsSync(realSendErrorPath)
+) {
+  throw new Error("Expected attempted real HTTP send failure to mark job failed and write error artifact.");
 }
 
 const mockRenderResponse = await server.inject({
@@ -2320,6 +2472,25 @@ async function createJobThroughHttpPlan(jobId: string): Promise<string> {
     server.inject({ method: "POST", url: `/jobs/${jobId}/http-send-plan/short-video-maker` }),
     200,
     `HTTP send plan ${jobId}`
+  );
+
+  return jobDir;
+}
+
+async function createJobThroughRealHttpSenderReadiness(jobId: string): Promise<string> {
+  const jobDir = await createJobThroughHttpPlan(jobId);
+
+  process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+  await expectStatus(
+    server.inject({ method: "POST", url: `/jobs/${jobId}/http-send-mock/short-video-maker` }),
+    200,
+    `mocked HTTP send ${jobId}`
+  );
+  delete process.env.RAIZ_ENABLE_REAL_RENDER;
+  await expectStatus(
+    server.inject({ method: "POST", url: `/jobs/${jobId}/real-http-sender-readiness` }),
+    200,
+    `real HTTP sender readiness ${jobId}`
   );
 
   return jobDir;

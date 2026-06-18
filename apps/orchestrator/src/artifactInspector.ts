@@ -15,6 +15,9 @@ export type JobArtifactType =
   | "adapter_http_send_plan"
   | "adapter_http_mock_response"
   | "real_http_sender_readiness"
+  | "adapter_sent_request"
+  | "adapter_response"
+  | "adapter_error"
   | "output_dir"
   | "output_file";
 
@@ -43,6 +46,9 @@ export interface JobArtifactsInventory {
     has_short_video_maker_http_send_plan: boolean;
     has_short_video_maker_mock_response: boolean;
     has_real_http_sender_readiness: boolean;
+    has_short_video_maker_sent_request: boolean;
+    has_short_video_maker_response: boolean;
+    has_short_video_maker_error: boolean;
     has_output: boolean;
   };
   created_at: string;
@@ -86,6 +92,9 @@ export async function inspectJobArtifacts(
       "real_http_sender_readiness",
       paths.realHttpSenderReadinessPath
     ),
+    inspectArtifact("short-video-maker-request.sent.json", "adapter_sent_request", paths.shortVideoMakerSentRequestPath),
+    inspectArtifact("short-video-maker-response.json", "adapter_response", paths.shortVideoMakerResponsePath),
+    inspectArtifact("short-video-maker-error.json", "adapter_error", paths.shortVideoMakerErrorPath),
     inspectArtifact("output", "output_dir", paths.outputDir)
   ]);
   const outputArtifacts = await inspectOutputFiles(paths.outputDir);
@@ -107,6 +116,9 @@ export async function inspectJobArtifacts(
       has_short_video_maker_http_send_plan: artifactExists(artifacts, "short-video-maker-http-send.plan.json"),
       has_short_video_maker_mock_response: artifactExists(artifacts, "short-video-maker-response.mock.json"),
       has_real_http_sender_readiness: artifactExists(artifacts, "real-http-sender-readiness.json"),
+      has_short_video_maker_sent_request: artifactExists(artifacts, "short-video-maker-request.sent.json"),
+      has_short_video_maker_response: artifactExists(artifacts, "short-video-maker-response.json"),
+      has_short_video_maker_error: artifactExists(artifacts, "short-video-maker-error.json"),
       has_output: artifactExists(artifacts, "output")
     },
     created_at: new Date().toISOString()

@@ -58,6 +58,9 @@ export interface JobPaths {
   shortVideoMakerHttpSendPlanPath: string;
   shortVideoMakerMockResponsePath: string;
   realHttpSenderReadinessPath: string;
+  shortVideoMakerSentRequestPath: string;
+  shortVideoMakerResponsePath: string;
+  shortVideoMakerErrorPath: string;
 }
 
 export class JobConflictError extends Error {
@@ -395,7 +398,10 @@ export function getJobPaths(jobId: string, options: PersistenceOptions = {}): Jo
     shortVideoMakerDryRunRequestPath: resolve(jobDir, "short-video-maker-request.dry-run.json"),
     shortVideoMakerHttpSendPlanPath: resolve(jobDir, "short-video-maker-http-send.plan.json"),
     shortVideoMakerMockResponsePath: resolve(jobDir, "short-video-maker-response.mock.json"),
-    realHttpSenderReadinessPath: resolve(jobDir, "real-http-sender-readiness.json")
+    realHttpSenderReadinessPath: resolve(jobDir, "real-http-sender-readiness.json"),
+    shortVideoMakerSentRequestPath: resolve(jobDir, "short-video-maker-request.sent.json"),
+    shortVideoMakerResponsePath: resolve(jobDir, "short-video-maker-response.json"),
+    shortVideoMakerErrorPath: resolve(jobDir, "short-video-maker-error.json")
   };
 }
 

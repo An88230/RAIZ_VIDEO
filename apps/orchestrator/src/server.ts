@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 
 import { loadEnvConfig } from "./envConfig.js";
 import { getExecutionGuard } from "./executionGuard.js";
+import { createFetchHttpClient } from "./httpClient.js";
 import { inspectJobArtifacts } from "./artifactInspector.js";
 import {
   createShortVideoMakerPayload,
@@ -36,26 +37,29 @@ import {
   JobHttpSendPlanStateError
 } from "./shortVideoMakerHttpSendPlan.js";
 import {
-  JobShortVideoMakerSenderReadinessError,
-  JobShortVideoMakerSenderStateError,
-  RealRenderExecutionDisabledError,
-  sendToShortVideoMakerStub
-} from "./shortVideoMakerSenderStub.js";
-import {
   JobHttpMockSendReadinessError,
   JobHttpMockSendStateError,
   sendShortVideoMakerWithMockedHttp,
   type HttpClient
 } from "./shortVideoMakerMockHttpSender.js";
+import {
+  JobRealHttpSenderReadinessError,
+  JobRealHttpSenderStateError,
+  JobRealHttpSenderSubmitError,
+  RealRenderExecutionDisabledError,
+  sendShortVideoMakerWithRealHttp
+} from "./shortVideoMakerRealHttpSender.js";
 import { InvalidStatusTransitionError, isLocalJobStatus } from "./statusTransitions.js";
 
 export interface CreateServerOptions {
   logger?: boolean;
   storageRoot?: string;
   shortVideoMakerVendorPath?: string;
+  shortVideoMakerHttpClient?: HttpClient;
 }
 
 const renderAdapters = [shortVideoMakerAdapter];
+const realHttpClient = createFetchHttpClient();
 
 const internalMockHttpClient: HttpClient = {
   async post(_url, _body) {
@@ -470,11 +474,13 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
 
   server.post<{ Params: { id: string } }>("/jobs/:id/send-to-short-video-maker", async (request, reply) => {
     try {
-      const result = await sendToShortVideoMakerStub(request.params.id, {
-        storageRoot: options.storageRoot
-      });
-
-      return reply.code(501).send(result);
+      return await sendShortVideoMakerWithRealHttp(
+        request.params.id,
+        options.shortVideoMakerHttpClient ?? realHttpClient,
+        {
+          storageRoot: options.storageRoot
+        }
+      );
     } catch (error) {
       if (error instanceof JobNotFoundError) {
         return reply.code(404).send({
@@ -491,11 +497,24 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
         });
       }
 
-      if (error instanceof JobShortVideoMakerSenderStateError || error instanceof JobShortVideoMakerSenderReadinessError) {
+      if (
+        error instanceof JobRealHttpSenderStateError ||
+        error instanceof JobRealHttpSenderReadinessError
+      ) {
         return reply.code(409).send({
           status: "conflict",
           job_id: request.params.id,
           error: error.message
+        });
+      }
+
+      if (error instanceof JobRealHttpSenderSubmitError) {
+        return reply.code(502).send({
+          status: "submit_failed",
+          job_id: request.params.id,
+          error: error.message,
+          http_status: error.http_status,
+          artifact_path: error.artifact_path
         });
       }
 
