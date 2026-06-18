@@ -25,6 +25,11 @@ import {
   JobRealHttpSenderReadinessStateError,
   runRealHttpSenderReadinessChecklist
 } from "./realHttpSenderReadiness.js";
+import {
+  createOutputReviewPackage,
+  JobOutputReviewPackageArtifactError,
+  JobOutputReviewPackageStateError
+} from "./outputReviewPackage.js";
 import { JobReadinessStateError, runReadinessReview } from "./readinessReview.js";
 import {
   ingestShortVideoMakerOutput,
@@ -540,6 +545,34 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
       }
 
       if (error instanceof JobOutputIngestionStateError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/review-package", async (request, reply) => {
+    try {
+      return await createOutputReviewPackage(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (
+        error instanceof JobOutputReviewPackageStateError ||
+        error instanceof JobOutputReviewPackageArtifactError
+      ) {
         return reply.code(409).send({
           status: "conflict",
           job_id: request.params.id,

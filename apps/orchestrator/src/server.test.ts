@@ -185,6 +185,8 @@ interface ArtifactInventoryBody {
     has_short_video_maker_response?: boolean;
     has_short_video_maker_error?: boolean;
     has_output_manifest?: boolean;
+    has_review_package?: boolean;
+    has_review_folder?: boolean;
     has_output?: boolean;
   };
 }
@@ -259,6 +261,30 @@ interface ShortVideoMakerOutputManifestBody {
   output_path?: string | null;
   final_video_path?: string | null;
   checks?: Array<{ name?: string; passed?: boolean; severity?: string }>;
+  errors?: string[];
+}
+
+interface OutputReviewPackageBody {
+  status?: string;
+  final_video_path?: string | null;
+  job_summary?: {
+    title?: string;
+    language?: string;
+    direction?: string;
+    aspect_ratio?: string;
+    template_id?: string;
+  };
+  render_metadata?: {
+    output_manifest_path?: string;
+    review_folder_path?: string;
+  };
+  timestamps?: {
+    job_created_at?: string;
+    job_updated_at?: string;
+    output_manifest_created_at?: string | null;
+    review_package_created_at?: string;
+  };
+  warnings?: string[];
   errors?: string[];
 }
 
@@ -1594,6 +1620,104 @@ if (
   throw new Error("Expected artifacts endpoint to detect output-manifest.json.");
 }
 
+const reviewPackageResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realSendJobId}/review-package`
+});
+
+if (reviewPackageResponse.statusCode !== 200) {
+  throw new Error(`Expected review package creation to return 200, got ${reviewPackageResponse.statusCode}.`);
+}
+
+const reviewPackage = JSON.parse(reviewPackageResponse.body) as OutputReviewPackageBody;
+const reviewPackagePath = resolve(realSendJobDir, "review-package.json");
+const reviewFolderPath = resolve(realSendJobDir, "review");
+
+if (
+  reviewPackage.status !== "ready_for_review" ||
+  reviewPackage.final_video_path !== finalVideoPath ||
+  reviewPackage.job_summary?.title !== sampleJob.title ||
+  reviewPackage.job_summary?.language !== "ar" ||
+  reviewPackage.job_summary?.direction !== "rtl" ||
+  reviewPackage.job_summary?.aspect_ratio !== "9:16" ||
+  reviewPackage.job_summary?.template_id !== "raiz_dark_hook_01" ||
+  reviewPackage.render_metadata?.output_manifest_path !== outputManifestPath ||
+  reviewPackage.render_metadata?.review_folder_path !== reviewFolderPath ||
+  !reviewPackage.timestamps?.job_created_at ||
+  !reviewPackage.timestamps.job_updated_at ||
+  !reviewPackage.timestamps.output_manifest_created_at ||
+  !reviewPackage.timestamps.review_package_created_at ||
+  !Array.isArray(reviewPackage.warnings) ||
+  !Array.isArray(reviewPackage.errors)
+) {
+  throw new Error("Expected review package to include final video path, job summary, metadata, timestamps, and issues.");
+}
+
+if (!existsSync(reviewPackagePath) || !existsSync(reviewFolderPath)) {
+  throw new Error("Expected review package creation to create review-package.json and review/ folder.");
+}
+
+const reviewPackageStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/status`
+});
+const reviewPackageStatus = JSON.parse(reviewPackageStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    review_package_path?: string;
+    review_folder_path?: string;
+    review_package_created?: boolean;
+  };
+};
+
+if (
+  reviewPackageStatus.status !== "rendered" ||
+  reviewPackageStatus.metadata?.review_package_path !== reviewPackagePath ||
+  reviewPackageStatus.metadata.review_folder_path !== reviewFolderPath ||
+  reviewPackageStatus.metadata.review_package_created !== true
+) {
+  throw new Error("Expected review package creation to keep status rendered and update review metadata.");
+}
+
+const reviewPackageEvents = readFileSync(resolve(realSendJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!reviewPackageEvents.some((event) => event.type === "job.review_package_created")) {
+  throw new Error("Expected review package creation to append job.review_package_created event.");
+}
+
+const reviewPackageArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/artifacts`
+});
+const reviewPackageArtifacts = JSON.parse(reviewPackageArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  reviewPackageArtifacts.summary?.has_review_package !== true ||
+  reviewPackageArtifacts.summary.has_review_folder !== true ||
+  !reviewPackageArtifacts.artifacts?.some(
+    (artifact) => artifact.name === "review-package.json" && artifact.type === "review_package" && artifact.exists
+  ) ||
+  !reviewPackageArtifacts.artifacts.some(
+    (artifact) => artifact.name === "review" && artifact.type === "review_dir" && artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect review-package.json and review/ folder.");
+}
+
+const notRenderedReviewPackageResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/review-package"
+});
+
+if (notRenderedReviewPackageResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected review package for non-rendered job to return 409, got ${notRenderedReviewPackageResponse.statusCode}.`
+  );
+}
+
 const missingOutputJobId = "smoke-arabic-output-missing-001";
 const missingOutputJobDir = await createJobThroughRealHttpSenderReadiness(missingOutputJobId);
 process.env.RAIZ_ENABLE_REAL_RENDER = "true";
@@ -2448,6 +2572,15 @@ const unknownOutputIngestionResponse = await server.inject({
 
 if (unknownOutputIngestionResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job output ingestion to return 404, got ${unknownOutputIngestionResponse.statusCode}.`);
+}
+
+const unknownReviewPackageResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/review-package"
+});
+
+if (unknownReviewPackageResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job review package to return 404, got ${unknownReviewPackageResponse.statusCode}.`);
 }
 
 const adapterHealthJob = {
