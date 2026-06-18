@@ -3,6 +3,7 @@ import { validateRaizJob } from "@raiz/job-schema";
 import { shortVideoMakerAdapter } from "@raiz/render-adapters";
 import { resolve } from "node:path";
 
+import { loadEnvConfig } from "./envConfig.js";
 import { getExecutionGuard } from "./executionGuard.js";
 import { inspectJobArtifacts } from "./artifactInspector.js";
 import {
@@ -42,7 +43,17 @@ export interface CreateServerOptions {
 const renderAdapters = [shortVideoMakerAdapter];
 
 function getShortVideoMakerVendorPath(options: CreateServerOptions): string {
-  return resolve(options.shortVideoMakerVendorPath ?? "vendor/short-video-maker");
+  return resolve(options.shortVideoMakerVendorPath ?? loadEnvConfig().shortVideoMakerVendorPath);
+}
+
+function getSafeConfigView() {
+  const config = loadEnvConfig();
+
+  return {
+    ...config,
+    safe_defaults: true,
+    real_execution_blocked_by_default: true
+  };
 }
 
 interface PatchJobStatusBody {
@@ -64,6 +75,10 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
 
   server.get("/system/execution-guard", async () => {
     return getExecutionGuard();
+  });
+
+  server.get("/system/config", async () => {
+    return getSafeConfigView();
   });
 
   server.post("/jobs/validate", async (request, reply) => {

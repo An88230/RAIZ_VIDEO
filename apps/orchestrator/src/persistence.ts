@@ -9,6 +9,7 @@ import { constants } from "node:fs";
 import { access, appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { loadEnvConfig } from "./envConfig.js";
 import { prepareRenderPlan, type RenderPlan } from "./renderPlan.js";
 import { assertValidStatusTransition, type LocalJobStatus } from "./statusTransitions.js";
 
@@ -401,7 +402,11 @@ function getJobDir(jobId: string, options: PersistenceOptions): string {
 }
 
 function getJobsRoot(options: PersistenceOptions): string {
-  return resolve(options.storageRoot ?? process.env.RAIZ_STORAGE_DIR ?? "storage", "jobs");
+  if (options.storageRoot) {
+    return resolve(options.storageRoot, "jobs");
+  }
+
+  return resolve(loadEnvConfig().storageDir);
 }
 
 async function pathExists(path: string): Promise<boolean> {

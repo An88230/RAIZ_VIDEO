@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { EnvConfigError, loadEnvConfig } from "./envConfig.js";
 import {
   assertRealRenderAllowed,
   getExecutionGuard,
@@ -10,8 +11,16 @@ import {
 } from "./executionGuard.js";
 import { createServer } from "./server.js";
 
-const originalRealRenderEnv = process.env.RAIZ_ENABLE_REAL_RENDER;
-delete process.env.RAIZ_ENABLE_REAL_RENDER;
+const managedEnvKeys = [
+  "RAIZ_ENABLE_REAL_RENDER",
+  "RAIZ_SHORT_VIDEO_MAKER_MODE",
+  "RAIZ_SHORT_VIDEO_MAKER_BASE_URL",
+  "RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS",
+  "RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH",
+  "RAIZ_STORAGE_DIR"
+];
+const originalEnv = snapshotEnv(managedEnvKeys);
+clearManagedEnv();
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const samplePath = resolve(currentDir, "../../../samples/valid-arabic-9x16-job.json");
@@ -19,6 +28,19 @@ const shortVideoMakerVendorPath = resolve(currentDir, "../../../vendor/short-vid
 const sampleJob = JSON.parse(readFileSync(samplePath, "utf8")) as Record<string, unknown>;
 const storageRoot = mkdtempSync(resolve(tmpdir(), "raiz-orchestrator-test-"));
 const server = createServer({ storageRoot, shortVideoMakerVendorPath });
+
+const defaultEnvConfig = loadEnvConfig();
+
+if (
+  defaultEnvConfig.realRenderEnabled !== false ||
+  defaultEnvConfig.shortVideoMakerMode !== "http" ||
+  defaultEnvConfig.shortVideoMakerBaseUrl !== "http://localhost:3123" ||
+  defaultEnvConfig.shortVideoMakerTimeoutMs !== 120000 ||
+  defaultEnvConfig.shortVideoMakerVendorPath !== "vendor/short-video-maker" ||
+  defaultEnvConfig.storageDir !== "storage/jobs"
+) {
+  throw new Error("Expected env config defaults to be safe.");
+}
 
 const defaultExecutionGuard = getExecutionGuard();
 
@@ -47,6 +69,14 @@ if (!disabledGuardRejected) {
   throw new Error("Expected assertRealRenderAllowed to reject by default.");
 }
 
+process.env.RAIZ_ENABLE_REAL_RENDER = "false";
+const explicitlyDisabledGuard = getExecutionGuard();
+
+if (explicitlyDisabledGuard.real_render_enabled !== false || explicitlyDisabledGuard.raw_value !== "false") {
+  throw new Error("Expected RAIZ_ENABLE_REAL_RENDER=false to keep real rendering blocked.");
+}
+
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
 process.env.RAIZ_ENABLE_REAL_RENDER = "true";
 const enabledExecutionGuard = getExecutionGuard();
 
@@ -56,6 +86,44 @@ if (enabledExecutionGuard.real_render_enabled !== true || enabledExecutionGuard.
 
 assertRealRenderAllowed();
 delete process.env.RAIZ_ENABLE_REAL_RENDER;
+
+let invalidModeRejected = false;
+
+try {
+  loadEnvConfig({
+    ...process.env,
+    RAIZ_SHORT_VIDEO_MAKER_MODE: "docker"
+  });
+} catch (error) {
+  if (error instanceof EnvConfigError) {
+    invalidModeRejected = true;
+  } else {
+    throw error;
+  }
+}
+
+if (!invalidModeRejected) {
+  throw new Error("Expected invalid short-video-maker mode to throw EnvConfigError.");
+}
+
+let invalidTimeoutRejected = false;
+
+try {
+  loadEnvConfig({
+    ...process.env,
+    RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS: "0"
+  });
+} catch (error) {
+  if (error instanceof EnvConfigError) {
+    invalidTimeoutRejected = true;
+  } else {
+    throw error;
+  }
+}
+
+if (!invalidTimeoutRejected) {
+  throw new Error("Expected invalid short-video-maker timeout to throw EnvConfigError.");
+}
 
 interface ArtifactInventoryBody {
   artifacts?: Array<{ name?: string; type?: string; exists?: boolean }>;
@@ -167,6 +235,39 @@ if (
   !executionGuardBody.message?.includes("disabled")
 ) {
   throw new Error("Expected execution guard endpoint to report blocked-by-default state.");
+}
+
+const configResponse = await server.inject({
+  method: "GET",
+  url: "/system/config"
+});
+
+if (configResponse.statusCode !== 200) {
+  throw new Error(`Expected system config endpoint to return 200, got ${configResponse.statusCode}.`);
+}
+
+const configBody = JSON.parse(configResponse.body) as {
+  realRenderEnabled?: boolean;
+  shortVideoMakerMode?: string;
+  shortVideoMakerBaseUrl?: string;
+  shortVideoMakerTimeoutMs?: number;
+  shortVideoMakerVendorPath?: string;
+  storageDir?: string;
+  safe_defaults?: boolean;
+  real_execution_blocked_by_default?: boolean;
+};
+
+if (
+  configBody.realRenderEnabled !== false ||
+  configBody.shortVideoMakerMode !== "http" ||
+  configBody.shortVideoMakerBaseUrl !== "http://localhost:3123" ||
+  configBody.shortVideoMakerTimeoutMs !== 120000 ||
+  configBody.shortVideoMakerVendorPath !== "vendor/short-video-maker" ||
+  configBody.storageDir !== "storage/jobs" ||
+  configBody.safe_defaults !== true ||
+  configBody.real_execution_blocked_by_default !== true
+) {
+  throw new Error("Expected system config endpoint to return safe config view.");
 }
 
 const renderResponse = await server.inject({
@@ -1659,11 +1760,27 @@ if (existsSync(resolve(invalidStorageRoot, "jobs"))) {
 
 await invalidServer.close();
 await server.close();
-if (originalRealRenderEnv === undefined) {
-  delete process.env.RAIZ_ENABLE_REAL_RENDER;
-} else {
-  process.env.RAIZ_ENABLE_REAL_RENDER = originalRealRenderEnv;
-}
+restoreEnv(originalEnv);
 rmSync(storageRoot, { force: true, recursive: true });
 rmSync(invalidStorageRoot, { force: true, recursive: true });
 console.log(`Orchestrator API skeleton validated ${sampleJob.job_id}.`);
+
+function snapshotEnv(keys: string[]): Record<string, string | undefined> {
+  return Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+}
+
+function restoreEnv(snapshot: Record<string, string | undefined>): void {
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
+function clearManagedEnv(): void {
+  for (const key of managedEnvKeys) {
+    delete process.env[key];
+  }
+}

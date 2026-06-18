@@ -1,3 +1,5 @@
+import { loadEnvConfig } from "./envConfig.js";
+
 const realRenderFlag = "RAIZ_ENABLE_REAL_RENDER";
 
 export interface ExecutionGuard {
@@ -19,15 +21,15 @@ export class RealRenderExecutionDisabledError extends Error {
 }
 
 export function getExecutionGuard(env: NodeJS.ProcessEnv = process.env): ExecutionGuard {
+  const config = loadEnvConfig(env);
   const rawValue = env[realRenderFlag] ?? null;
-  const realRenderEnabled = rawValue === "true";
 
   return {
-    real_render_enabled: realRenderEnabled,
+    real_render_enabled: config.realRenderEnabled,
     source: realRenderFlag,
     raw_value: rawValue,
     policy: "blocked_by_default",
-    message: realRenderEnabled
+    message: config.realRenderEnabled
       ? "Real render execution is enabled by RAIZ_ENABLE_REAL_RENDER=true."
       : "Real render execution is disabled. Set RAIZ_ENABLE_REAL_RENDER=true to allow it."
   };
