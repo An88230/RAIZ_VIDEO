@@ -261,9 +261,34 @@ Completed scope:
 - Artifact inspection detects `short-video-maker-http-send.plan.json`.
 - No request is sent, no network call is made, no short-video-maker process is called, no render endpoint is called, no Docker process is started, no dependencies are installed, and no video is generated.
 
+## Phase 17: Mocked HTTP Sender Contract
+
+Goal: validate the future HTTP sender contract with an injectable mocked HTTP client only.
+
+Completed scope:
+
+- Added a small `HttpClient` interface with `post(url, body, options)`.
+- Added `sendShortVideoMakerWithMockedHttp(jobId, httpClient)`.
+- `POST /jobs/:id/http-send-mock/short-video-maker` uses an internal mocked HTTP client.
+- Mocked HTTP send requires status `preparing`.
+- Mocked HTTP send requires `metadata.ready_for_dry_run: true`.
+- Mocked HTTP send requires `metadata.dry_run_request_created: true`.
+- Mocked HTTP send requires `metadata.http_send_plan_created: true`.
+- Mocked HTTP send requires `metadata.readiness_status: passed`.
+- Mocked HTTP send requires `RAIZ_ENABLE_REAL_RENDER=true`.
+- With the default guard, the endpoint returns `403` without changing status or events.
+- With the guard enabled, it writes `storage/jobs/{job_id}/short-video-maker-response.mock.json`.
+- The mock response records `mode: http_mock`, `status: submitted_mock`, HTTP status `202`, mock external id, response body, and mocked metadata.
+- Status remains unchanged.
+- Status metadata records the mock response path and `http_mock_send_completed: true`.
+- The event log receives `job.http_mock_send_completed`.
+- Artifact inspection detects `short-video-maker-response.mock.json`.
+- Tests verify the injected mock client is called exactly once and global fetch is not used.
+- No real network request is made, no short-video-maker process is called, no render endpoint is called, no Docker process is started, no dependencies are installed, and no video is generated.
+
 One clear next task:
 
-Implement the real HTTP sender behind `RAIZ_ENABLE_REAL_RENDER=true`, using the planned artifact and keeping all safety gates in place.
+Implement the real HTTP sender behind `RAIZ_ENABLE_REAL_RENDER=true`, using the planned and mocked contracts while keeping all safety gates in place.
 
 ## Later Phases
 

@@ -454,6 +454,44 @@ The job remains `preparing`. `status.json` receives `metadata.short_video_maker_
 
 Calling this before the dry-run request exists returns `409 conflict`. Unknown jobs return `404`. Invalid `RAIZ_SHORT_VIDEO_MAKER_MODE` or timeout config returns a clear config error before any network call could happen.
 
+## Run Mocked HTTP Sender
+
+Phase 17 validates the future HTTP sender contract with an injected mocked HTTP client only. It still does not call `short-video-maker`, does not use global fetch, does not make a real network request, does not start Docker, does not start a process, does not change job status, and does not generate video.
+
+By default this endpoint is blocked by the execution guard:
+
+```bash
+curl -i \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/http-send-mock/short-video-maker
+```
+
+Default response is `403` unless the server is started with:
+
+```bash
+RAIZ_ENABLE_REAL_RENDER=true npm run dev:orchestrator
+```
+
+With the guard enabled, the endpoint uses an internal mock client and creates:
+
+```text
+storage/jobs/smoke-arabic-001/short-video-maker-response.mock.json
+```
+
+The artifact records:
+
+```text
+mode: http_mock
+status: submitted_mock
+http_status: 202
+external_job_id: mock-...
+metadata.mocked: true
+```
+
+The job remains `preparing`. `status.json` receives `metadata.short_video_maker_mock_response_path` and `metadata.http_mock_send_completed`. `events.ndjson` receives `job.http_mock_send_completed`.
+
+Calling this before `short-video-maker-http-send.plan.json` exists returns `409 conflict`. Unknown jobs return `404`.
+
 ## Inspect Job Artifacts
 
 Phase 10 adds a read-only inventory endpoint for files under `storage/jobs/{job_id}`.
@@ -474,6 +512,7 @@ adapter-health.short-video-maker.json
 short-video-maker-payload.json
 short-video-maker-request.dry-run.json
 short-video-maker-http-send.plan.json
+short-video-maker-response.mock.json
 output/
 output files
 ```
