@@ -12,6 +12,7 @@ export type JobArtifactType =
   | "adapter_health"
   | "adapter_payload"
   | "adapter_dry_run_request"
+  | "adapter_http_send_plan"
   | "output_dir"
   | "output_file";
 
@@ -37,6 +38,7 @@ export interface JobArtifactsInventory {
     has_adapter_health: boolean;
     has_short_video_maker_payload: boolean;
     has_short_video_maker_dry_run_request: boolean;
+    has_short_video_maker_http_send_plan: boolean;
     has_output: boolean;
   };
   created_at: string;
@@ -65,6 +67,11 @@ export async function inspectJobArtifacts(
       "adapter_dry_run_request",
       paths.shortVideoMakerDryRunRequestPath
     ),
+    inspectArtifact(
+      "short-video-maker-http-send.plan.json",
+      "adapter_http_send_plan",
+      paths.shortVideoMakerHttpSendPlanPath
+    ),
     inspectArtifact("output", "output_dir", paths.outputDir)
   ]);
   const outputArtifacts = await inspectOutputFiles(paths.outputDir);
@@ -83,6 +90,7 @@ export async function inspectJobArtifacts(
       has_adapter_health: artifactExists(artifacts, "adapter-health.short-video-maker.json"),
       has_short_video_maker_payload: artifactExists(artifacts, "short-video-maker-payload.json"),
       has_short_video_maker_dry_run_request: artifactExists(artifacts, "short-video-maker-request.dry-run.json"),
+      has_short_video_maker_http_send_plan: artifactExists(artifacts, "short-video-maker-http-send.plan.json"),
       has_output: artifactExists(artifacts, "output")
     },
     created_at: new Date().toISOString()

@@ -136,6 +136,7 @@ interface ArtifactInventoryBody {
     has_adapter_health?: boolean;
     has_short_video_maker_payload?: boolean;
     has_short_video_maker_dry_run_request?: boolean;
+    has_short_video_maker_http_send_plan?: boolean;
     has_output?: boolean;
   };
 }
@@ -165,6 +166,16 @@ interface ShortVideoMakerDryRunRequestBody {
     will_generate_video?: boolean;
     will_modify_vendor?: boolean;
   };
+}
+
+interface ShortVideoMakerHttpSendPlanBody {
+  execution?: string;
+  method?: string;
+  url?: string;
+  timeout_ms?: number;
+  headers?: { "content-type"?: string };
+  body_source_path?: string;
+  safety?: { will_make_network_request?: boolean };
 }
 
 const validateResponse = await server.inject({
@@ -966,6 +977,88 @@ if (
   throw new Error("Expected artifacts endpoint to detect short-video-maker dry-run request.");
 }
 
+const httpSendPlanResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/http-send-plan/short-video-maker"
+});
+
+if (httpSendPlanResponse.statusCode !== 200) {
+  throw new Error(`Expected HTTP send plan creation after dry-run request, got ${httpSendPlanResponse.statusCode}.`);
+}
+
+const httpSendPlan = JSON.parse(httpSendPlanResponse.body) as ShortVideoMakerHttpSendPlanBody;
+const httpSendPlanPath = resolve(prepareJobDir, "short-video-maker-http-send.plan.json");
+
+if (
+  httpSendPlan.execution !== "planned_only" ||
+  httpSendPlan.method !== "POST" ||
+  httpSendPlan.url !== "http://localhost:3123/render" ||
+  httpSendPlan.timeout_ms !== 120000 ||
+  httpSendPlan.headers?.["content-type"] !== "application/json" ||
+  httpSendPlan.body_source_path !== dryRunRequestPath ||
+  httpSendPlan.safety?.will_make_network_request !== false
+) {
+  throw new Error("Expected HTTP send plan to contain deterministic planned-only request details.");
+}
+
+if (!existsSync(httpSendPlanPath)) {
+  throw new Error("Expected HTTP send plan endpoint to create short-video-maker-http-send.plan.json.");
+}
+
+const httpSendPlanStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/status"
+});
+const httpSendPlanStatus = JSON.parse(httpSendPlanStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    short_video_maker_http_send_plan_path?: string;
+    http_send_plan_created?: boolean;
+  };
+};
+
+if (
+  httpSendPlanStatus.status !== "preparing" ||
+  httpSendPlanStatus.metadata?.short_video_maker_http_send_plan_path !== httpSendPlanPath ||
+  httpSendPlanStatus.metadata.http_send_plan_created !== true
+) {
+  throw new Error("Expected HTTP send plan creation to keep status preparing and update plan metadata.");
+}
+
+const httpSendPlanEvents = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; adapter?: string });
+
+if (
+  !httpSendPlanEvents.some((event) => event.type === "job.http_send_plan_created" && event.adapter === "short_video_maker")
+) {
+  throw new Error("Expected HTTP send plan creation to append job.http_send_plan_created event.");
+}
+
+const httpSendPlanArtifactsResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/artifacts"
+});
+
+if (httpSendPlanArtifactsResponse.statusCode !== 200) {
+  throw new Error(`Expected artifacts endpoint to work after HTTP send plan, got ${httpSendPlanArtifactsResponse.statusCode}.`);
+}
+
+const httpSendPlanArtifacts = JSON.parse(httpSendPlanArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  httpSendPlanArtifacts.summary?.has_short_video_maker_http_send_plan !== true ||
+  !httpSendPlanArtifacts.artifacts?.some(
+    (artifact) =>
+      artifact.name === "short-video-maker-http-send.plan.json" &&
+      artifact.type === "adapter_http_send_plan" &&
+      artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect short-video-maker HTTP send plan.");
+}
+
 const statusBeforeBlockedSend = readFileSync(resolve(prepareJobDir, "status.json"), "utf8");
 const eventsBeforeBlockedSend = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8");
 const blockedSendResponse = await server.inject({
@@ -1277,6 +1370,15 @@ const dryRunBeforeReadinessResponse = await server.inject({
 
 if (dryRunBeforeReadinessResponse.statusCode !== 409) {
   throw new Error(`Expected dry-run request before readiness to return 409, got ${dryRunBeforeReadinessResponse.statusCode}.`);
+}
+
+const httpSendPlanBeforeDryRunResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-mock-before-preflight-001/http-send-plan/short-video-maker"
+});
+
+if (httpSendPlanBeforeDryRunResponse.statusCode !== 409) {
+  throw new Error(`Expected HTTP send plan before dry-run request to return 409, got ${httpSendPlanBeforeDryRunResponse.statusCode}.`);
 }
 
 const readinessMissingHealthJob = {
@@ -1629,6 +1731,15 @@ const unknownDryRunResponse = await server.inject({
 
 if (unknownDryRunResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job dry-run request to return 404, got ${unknownDryRunResponse.statusCode}.`);
+}
+
+const unknownHttpSendPlanResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/http-send-plan/short-video-maker"
+});
+
+if (unknownHttpSendPlanResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job HTTP send plan to return 404, got ${unknownHttpSendPlanResponse.statusCode}.`);
 }
 
 const unknownSenderResponse = await server.inject({
