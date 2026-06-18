@@ -189,6 +189,7 @@ interface ArtifactInventoryBody {
     has_review_folder?: boolean;
     has_manual_review_approval?: boolean;
     has_manual_review_rejection?: boolean;
+    has_publish_package?: boolean;
     has_output?: boolean;
   };
 }
@@ -296,6 +297,25 @@ interface ManualReviewDecisionBody {
   review_package_path?: string;
   approved_at?: string;
   rejected_at?: string;
+}
+
+interface PublishPackageBody {
+  status?: string;
+  final_video_path?: string | null;
+  title?: string;
+  description?: string | null;
+  hashtags?: string[];
+  platform_targets?: Array<{ platform?: string; enabled?: boolean; status?: string }>;
+  approval?: {
+    approved?: boolean;
+    reviewer_note?: string | null;
+    approval_path?: string;
+    approved_at?: string;
+  };
+  metadata?: {
+    source?: string;
+    created_at?: string;
+  };
 }
 
 const validateResponse = await server.inject({
@@ -1789,6 +1809,82 @@ if (
   throw new Error("Expected artifacts endpoint to detect manual-review-approval.json.");
 }
 
+const publishPackageResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realSendJobId}/publish-package`
+});
+
+if (publishPackageResponse.statusCode !== 200) {
+  throw new Error(`Expected publish package creation to return 200, got ${publishPackageResponse.statusCode}.`);
+}
+
+const publishPackage = JSON.parse(publishPackageResponse.body) as PublishPackageBody;
+const publishPackagePath = resolve(realSendJobDir, "publish-package.json");
+
+if (
+  publishPackage.status !== "ready_for_publish" ||
+  publishPackage.final_video_path !== finalVideoPath ||
+  publishPackage.title !== sampleJob.title ||
+  publishPackage.description !== null ||
+  !Array.isArray(publishPackage.hashtags) ||
+  publishPackage.platform_targets?.[0]?.platform !== "youtube_shorts" ||
+  publishPackage.platform_targets?.[0]?.enabled !== false ||
+  publishPackage.platform_targets?.[0]?.status !== "placeholder" ||
+  publishPackage.approval?.approved !== true ||
+  publishPackage.approval.reviewer_note !== "Approved for local publish gate." ||
+  publishPackage.approval.approval_path !== manualApprovalPath ||
+  !publishPackage.approval.approved_at ||
+  publishPackage.metadata?.source !== "raiz_video_factory" ||
+  !publishPackage.metadata.created_at ||
+  !existsSync(publishPackagePath)
+) {
+  throw new Error("Expected publish package to include local publish contract fields after manual approval.");
+}
+
+const publishPackageStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/status`
+});
+const publishPackageStatus = JSON.parse(publishPackageStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    publish_package_created?: boolean;
+    publish_package_path?: string;
+  };
+};
+
+if (
+  publishPackageStatus.status !== "rendered" ||
+  publishPackageStatus.metadata?.publish_package_created !== true ||
+  publishPackageStatus.metadata.publish_package_path !== publishPackagePath
+) {
+  throw new Error("Expected publish package creation to keep status rendered and update publish metadata.");
+}
+
+const publishPackageEvents = readFileSync(resolve(realSendJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!publishPackageEvents.some((event) => event.type === "job.publish_package_created")) {
+  throw new Error("Expected publish package creation to append job.publish_package_created event.");
+}
+
+const publishPackageArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/artifacts`
+});
+const publishPackageArtifacts = JSON.parse(publishPackageArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  publishPackageArtifacts.summary?.has_publish_package !== true ||
+  !publishPackageArtifacts.artifacts?.some(
+    (artifact) => artifact.name === "publish-package.json" && artifact.type === "publish_package" && artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect publish-package.json.");
+}
+
 const manualRejectJobId = "smoke-arabic-manual-reject-001";
 const manualRejectJobDir = await createJobThroughReviewPackage(manualRejectJobId);
 const manualRejectResponse = await server.inject({
@@ -1862,6 +1958,17 @@ if (
   throw new Error("Expected artifacts endpoint to detect manual-review-rejection.json.");
 }
 
+const rejectedPublishPackageResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${manualRejectJobId}/publish-package`
+});
+
+if (rejectedPublishPackageResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected publish package after manual rejection to return 409, got ${rejectedPublishPackageResponse.statusCode}.`
+  );
+}
+
 const notRenderedReviewPackageResponse = await server.inject({
   method: "POST",
   url: "/jobs/smoke-arabic-prepare-001/review-package"
@@ -1892,6 +1999,17 @@ const notRenderedManualRejectionResponse = await server.inject({
 if (notRenderedManualRejectionResponse.statusCode !== 409) {
   throw new Error(
     `Expected manual rejection for non-rendered job to return 409, got ${notRenderedManualRejectionResponse.statusCode}.`
+  );
+}
+
+const notRenderedPublishPackageResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/publish-package"
+});
+
+if (notRenderedPublishPackageResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected publish package for non-rendered job to return 409, got ${notRenderedPublishPackageResponse.statusCode}.`
   );
 }
 
@@ -2776,6 +2894,15 @@ const unknownManualRejectionResponse = await server.inject({
 
 if (unknownManualRejectionResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job manual rejection to return 404, got ${unknownManualRejectionResponse.statusCode}.`);
+}
+
+const unknownPublishPackageResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/publish-package"
+});
+
+if (unknownPublishPackageResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job publish package to return 404, got ${unknownPublishPackageResponse.statusCode}.`);
 }
 
 const adapterHealthJob = {

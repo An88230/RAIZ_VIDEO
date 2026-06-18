@@ -23,6 +23,7 @@ export type JobArtifactType =
   | "review_dir"
   | "manual_review_approval"
   | "manual_review_rejection"
+  | "publish_package"
   | "output_dir"
   | "output_file";
 
@@ -59,6 +60,7 @@ export interface JobArtifactsInventory {
     has_review_folder: boolean;
     has_manual_review_approval: boolean;
     has_manual_review_rejection: boolean;
+    has_publish_package: boolean;
     has_output: boolean;
   };
   created_at: string;
@@ -110,6 +112,7 @@ export async function inspectJobArtifacts(
     inspectArtifact("review", "review_dir", paths.reviewDir),
     inspectArtifact("manual-review-approval.json", "manual_review_approval", paths.manualReviewApprovalPath),
     inspectArtifact("manual-review-rejection.json", "manual_review_rejection", paths.manualReviewRejectionPath),
+    inspectArtifact("publish-package.json", "publish_package", paths.publishPackagePath),
     inspectArtifact("output", "output_dir", paths.outputDir)
   ]);
   const outputArtifacts = await inspectOutputFiles(paths.outputDir);
@@ -139,6 +142,7 @@ export async function inspectJobArtifacts(
       has_review_folder: artifactExists(artifacts, "review"),
       has_manual_review_approval: artifactExists(artifacts, "manual-review-approval.json"),
       has_manual_review_rejection: artifactExists(artifacts, "manual-review-rejection.json"),
+      has_publish_package: artifactExists(artifacts, "publish-package.json"),
       has_output: artifactExists(artifacts, "output")
     },
     created_at: new Date().toISOString()
