@@ -139,6 +139,7 @@ interface ArtifactInventoryBody {
     has_short_video_maker_dry_run_request?: boolean;
     has_short_video_maker_http_send_plan?: boolean;
     has_short_video_maker_mock_response?: boolean;
+    has_real_http_sender_readiness?: boolean;
     has_output?: boolean;
   };
 }
@@ -188,6 +189,13 @@ interface ShortVideoMakerMockHttpResponseBody {
   external_job_id?: string;
   request_plan_path?: string;
   metadata?: { mocked?: boolean };
+}
+
+interface RealHttpSenderReadinessBody {
+  ready_for_real_http_sender?: boolean;
+  status?: string;
+  checks?: Array<{ name?: string; passed?: boolean; severity?: string }>;
+  errors?: string[];
 }
 
 const validateResponse = await server.inject({
@@ -1235,6 +1243,88 @@ if (globalFetchCalled) {
   throw new Error("Expected mocked HTTP sender to avoid global fetch and real network calls.");
 }
 
+const realHttpSenderReadinessResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/real-http-sender-readiness"
+});
+
+if (realHttpSenderReadinessResponse.statusCode !== 200) {
+  throw new Error(
+    `Expected real HTTP sender readiness to pass after mocked HTTP send, got ${realHttpSenderReadinessResponse.statusCode}.`
+  );
+}
+
+const realHttpSenderReadiness = JSON.parse(realHttpSenderReadinessResponse.body) as RealHttpSenderReadinessBody;
+const realHttpSenderReadinessPath = resolve(prepareJobDir, "real-http-sender-readiness.json");
+
+if (
+  realHttpSenderReadiness.status !== "passed" ||
+  realHttpSenderReadiness.ready_for_real_http_sender !== true ||
+  !realHttpSenderReadiness.checks?.some((check) => check.name === "mock_response_metadata" && check.passed)
+) {
+  throw new Error("Expected real HTTP sender readiness checklist to pass after mocked HTTP sender contract.");
+}
+
+if (!existsSync(realHttpSenderReadinessPath)) {
+  throw new Error("Expected real HTTP sender readiness endpoint to create real-http-sender-readiness.json.");
+}
+
+const realHttpSenderReadinessStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/status"
+});
+const realHttpSenderReadinessStatus = JSON.parse(realHttpSenderReadinessStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    real_http_sender_readiness_path?: string;
+    real_http_sender_readiness_status?: string;
+    ready_for_real_http_sender?: boolean;
+  };
+};
+
+if (
+  realHttpSenderReadinessStatus.status !== "preparing" ||
+  realHttpSenderReadinessStatus.metadata?.real_http_sender_readiness_path !== realHttpSenderReadinessPath ||
+  realHttpSenderReadinessStatus.metadata.real_http_sender_readiness_status !== "passed" ||
+  realHttpSenderReadinessStatus.metadata.ready_for_real_http_sender !== true
+) {
+  throw new Error("Expected real HTTP sender readiness to keep status preparing and update readiness metadata.");
+}
+
+const realHttpSenderReadinessEvents = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!realHttpSenderReadinessEvents.some((event) => event.type === "job.real_http_sender_readiness_passed")) {
+  throw new Error("Expected real HTTP sender readiness to append job.real_http_sender_readiness_passed event.");
+}
+
+const realHttpSenderReadinessArtifactsResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/artifacts"
+});
+
+if (realHttpSenderReadinessArtifactsResponse.statusCode !== 200) {
+  throw new Error(
+    `Expected artifacts endpoint to work after real HTTP readiness, got ${realHttpSenderReadinessArtifactsResponse.statusCode}.`
+  );
+}
+
+const realHttpSenderReadinessArtifacts = JSON.parse(realHttpSenderReadinessArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  realHttpSenderReadinessArtifacts.summary?.has_real_http_sender_readiness !== true ||
+  !realHttpSenderReadinessArtifacts.artifacts?.some(
+    (artifact) =>
+      artifact.name === "real-http-sender-readiness.json" &&
+      artifact.type === "real_http_sender_readiness" &&
+      artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect real-http-sender-readiness.json.");
+}
+
 const statusBeforeBlockedSend = readFileSync(resolve(prepareJobDir, "status.json"), "utf8");
 const eventsBeforeBlockedSend = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8");
 const blockedSendResponse = await server.inject({
@@ -1564,6 +1654,88 @@ const httpMockSendBeforePlanResponse = await server.inject({
 
 if (httpMockSendBeforePlanResponse.statusCode !== 409) {
   throw new Error(`Expected mocked HTTP send before HTTP plan to return 409, got ${httpMockSendBeforePlanResponse.statusCode}.`);
+}
+
+const realReadinessMissingMockJobId = "smoke-arabic-real-readiness-missing-mock-001";
+const realReadinessMissingMockDir = await createJobThroughHttpPlan(realReadinessMissingMockJobId);
+const realReadinessMissingMockResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realReadinessMissingMockJobId}/real-http-sender-readiness`
+});
+
+if (realReadinessMissingMockResponse.statusCode !== 200) {
+  throw new Error(
+    `Expected missing mock response readiness to return report, got ${realReadinessMissingMockResponse.statusCode}.`
+  );
+}
+
+const realReadinessMissingMock = JSON.parse(realReadinessMissingMockResponse.body) as RealHttpSenderReadinessBody;
+
+if (
+  realReadinessMissingMock.status !== "failed" ||
+  realReadinessMissingMock.ready_for_real_http_sender !== false ||
+  !realReadinessMissingMock.checks?.some((check) => check.name === "mock_response_exists" && !check.passed)
+) {
+  throw new Error("Expected real HTTP sender readiness to fail when mock response is missing.");
+}
+
+const realReadinessMissingMockStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realReadinessMissingMockJobId}/status`
+});
+const realReadinessMissingMockStatus = JSON.parse(realReadinessMissingMockStatusResponse.body) as {
+  status?: string;
+  metadata?: { real_http_sender_readiness_status?: string; ready_for_real_http_sender?: boolean };
+};
+
+if (
+  realReadinessMissingMockStatus.status !== "preparing" ||
+  realReadinessMissingMockStatus.metadata?.real_http_sender_readiness_status !== "failed" ||
+  realReadinessMissingMockStatus.metadata.ready_for_real_http_sender !== false ||
+  !existsSync(resolve(realReadinessMissingMockDir, "real-http-sender-readiness.json"))
+) {
+  throw new Error("Expected failed real HTTP sender readiness to keep status preparing and write failed metadata.");
+}
+
+const realReadinessMissingMockEvents = readFileSync(resolve(realReadinessMissingMockDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!realReadinessMissingMockEvents.some((event) => event.type === "job.real_http_sender_readiness_failed")) {
+  throw new Error("Expected missing mock response readiness to append failed event.");
+}
+
+const realReadinessMissingPlanJobId = "smoke-arabic-real-readiness-missing-plan-001";
+await createJobThroughDryRun(realReadinessMissingPlanJobId);
+const realReadinessMissingPlanResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realReadinessMissingPlanJobId}/real-http-sender-readiness`
+});
+
+if (realReadinessMissingPlanResponse.statusCode !== 200) {
+  throw new Error(
+    `Expected missing HTTP plan readiness to return report, got ${realReadinessMissingPlanResponse.statusCode}.`
+  );
+}
+
+const realReadinessMissingPlan = JSON.parse(realReadinessMissingPlanResponse.body) as RealHttpSenderReadinessBody;
+
+if (
+  realReadinessMissingPlan.status !== "failed" ||
+  realReadinessMissingPlan.ready_for_real_http_sender !== false ||
+  !realReadinessMissingPlan.checks?.some((check) => check.name === "http_send_plan_exists" && !check.passed)
+) {
+  throw new Error("Expected real HTTP sender readiness to fail when HTTP send plan is missing.");
+}
+
+const realReadinessNotPreparingResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${sampleJob.job_id}/real-http-sender-readiness`
+});
+
+if (realReadinessNotPreparingResponse.statusCode !== 409) {
+  throw new Error(`Expected real HTTP sender readiness for non-preparing job to return 409, got ${realReadinessNotPreparingResponse.statusCode}.`);
 }
 
 const readinessMissingHealthJob = {
@@ -1936,6 +2108,15 @@ if (unknownHttpMockSendResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job mocked HTTP send to return 404, got ${unknownHttpMockSendResponse.statusCode}.`);
 }
 
+const unknownRealHttpReadinessResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/real-http-sender-readiness"
+});
+
+if (unknownRealHttpReadinessResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job real HTTP sender readiness to return 404, got ${unknownRealHttpReadinessResponse.statusCode}.`);
+}
+
 const unknownSenderResponse = await server.inject({
   method: "POST",
   url: "/jobs/unknown-job/send-to-short-video-maker"
@@ -2087,5 +2268,71 @@ function restoreEnv(snapshot: Record<string, string | undefined>): void {
 function clearManagedEnv(): void {
   for (const key of managedEnvKeys) {
     delete process.env[key];
+  }
+}
+
+async function createJobThroughDryRun(jobId: string): Promise<string> {
+  const payload = {
+    ...sampleJob,
+    job_id: jobId,
+    output: {
+      ...(sampleJob.output as Record<string, unknown>),
+      filename: `${jobId}.mp4`
+    }
+  };
+  const jobDir = resolve(storageRoot, "jobs", jobId);
+
+  await expectStatus(
+    server.inject({
+      method: "POST",
+      url: "/jobs/render",
+      payload
+    }),
+    202,
+    `queue ${jobId}`
+  );
+  await expectStatus(server.inject({ method: "POST", url: `/jobs/${jobId}/prepare` }), 200, `prepare ${jobId}`);
+  await expectStatus(server.inject({ method: "POST", url: `/jobs/${jobId}/preflight` }), 200, `preflight ${jobId}`);
+  await expectStatus(server.inject({ method: "POST", url: `/jobs/${jobId}/adapter-health` }), 200, `adapter health ${jobId}`);
+  await expectStatus(
+    server.inject({ method: "POST", url: `/jobs/${jobId}/adapter-payload/short-video-maker` }),
+    200,
+    `adapter payload ${jobId}`
+  );
+  await expectStatus(
+    server.inject({ method: "POST", url: `/jobs/${jobId}/readiness-review` }),
+    200,
+    `readiness review ${jobId}`
+  );
+  await expectStatus(
+    server.inject({ method: "POST", url: `/jobs/${jobId}/adapter-dry-run/short-video-maker` }),
+    200,
+    `dry-run request ${jobId}`
+  );
+
+  return jobDir;
+}
+
+async function createJobThroughHttpPlan(jobId: string): Promise<string> {
+  const jobDir = await createJobThroughDryRun(jobId);
+
+  await expectStatus(
+    server.inject({ method: "POST", url: `/jobs/${jobId}/http-send-plan/short-video-maker` }),
+    200,
+    `HTTP send plan ${jobId}`
+  );
+
+  return jobDir;
+}
+
+async function expectStatus(
+  responsePromise: Promise<{ statusCode: number }>,
+  expectedStatus: number,
+  label: string
+): Promise<void> {
+  const response = await responsePromise;
+
+  if (response.statusCode !== expectedStatus) {
+    throw new Error(`Expected ${label} to return ${expectedStatus}, got ${response.statusCode}.`);
   }
 }

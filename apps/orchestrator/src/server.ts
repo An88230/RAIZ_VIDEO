@@ -20,6 +20,10 @@ import {
 } from "./persistence.js";
 import { JobMockRenderPreflightError, JobMockRenderStateError, runMockRender } from "./mockRender.js";
 import { JobPreflightStateError, runPreflight } from "./preflight.js";
+import {
+  JobRealHttpSenderReadinessStateError,
+  runRealHttpSenderReadinessChecklist
+} from "./realHttpSenderReadiness.js";
 import { JobReadinessStateError, runReadinessReview } from "./readinessReview.js";
 import {
   createShortVideoMakerDryRunRequest,
@@ -428,6 +432,31 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
       }
 
       if (error instanceof JobHttpMockSendStateError || error instanceof JobHttpMockSendReadinessError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/real-http-sender-readiness", async (request, reply) => {
+    try {
+      return await runRealHttpSenderReadinessChecklist(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (error instanceof JobRealHttpSenderReadinessStateError) {
         return reply.code(409).send({
           status: "conflict",
           job_id: request.params.id,
