@@ -32,6 +32,12 @@ import {
   JobPublishPackageStateError
 } from "./publishPackage.js";
 import {
+  createGoogleDriveExportPlan,
+  JobGoogleDriveExportPlanArtifactError,
+  JobGoogleDriveExportPlanReadinessError,
+  JobGoogleDriveExportPlanStateError
+} from "./googleDriveExportPlan.js";
+import {
   createYouTubeUploadPlan,
   JobYouTubeUploadPlanArtifactError,
   JobYouTubeUploadPlanReadinessError,
@@ -708,6 +714,35 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
         error instanceof JobYouTubeUploadPlanStateError ||
         error instanceof JobYouTubeUploadPlanReadinessError ||
         error instanceof JobYouTubeUploadPlanArtifactError
+      ) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/google-drive-export-plan", async (request, reply) => {
+    try {
+      return await createGoogleDriveExportPlan(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (
+        error instanceof JobGoogleDriveExportPlanStateError ||
+        error instanceof JobGoogleDriveExportPlanReadinessError ||
+        error instanceof JobGoogleDriveExportPlanArtifactError
       ) {
         return reply.code(409).send({
           status: "conflict",

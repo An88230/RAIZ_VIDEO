@@ -191,6 +191,7 @@ interface ArtifactInventoryBody {
     has_manual_review_rejection?: boolean;
     has_publish_package?: boolean;
     has_youtube_upload_plan?: boolean;
+    has_google_drive_export_plan?: boolean;
     has_output?: boolean;
   };
 }
@@ -329,6 +330,31 @@ interface YouTubeUploadPlanBody {
   privacyStatus?: string;
   made_for_kids?: boolean;
   publish_package_path?: string;
+  safety?: {
+    will_upload?: boolean;
+    will_make_network_request?: boolean;
+    will_modify_video?: boolean;
+  };
+  metadata?: {
+    source?: string;
+    created_at?: string;
+  };
+}
+
+interface GoogleDriveExportPlanBody {
+  platform?: string;
+  mode?: string;
+  source_video_path?: string;
+  filename?: string;
+  title?: string;
+  description?: string | null;
+  target?: {
+    type?: string;
+    folder_id?: string;
+    folder_name?: string;
+  };
+  publish_package_path?: string;
+  youtube_upload_plan_path?: string;
   safety?: {
     will_upload?: boolean;
     will_make_network_request?: boolean;
@@ -1983,6 +2009,87 @@ if (
   throw new Error("Expected artifacts endpoint to detect youtube-upload.plan.json.");
 }
 
+const googleDriveExportPlanResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realSendJobId}/google-drive-export-plan`
+});
+
+if (googleDriveExportPlanResponse.statusCode !== 200) {
+  throw new Error(`Expected Google Drive export plan creation to return 200, got ${googleDriveExportPlanResponse.statusCode}.`);
+}
+
+const googleDriveExportPlan = JSON.parse(googleDriveExportPlanResponse.body) as GoogleDriveExportPlanBody;
+const googleDriveExportPlanPath = resolve(realSendJobDir, "google-drive-export.plan.json");
+
+if (
+  googleDriveExportPlan.platform !== "google_drive" ||
+  googleDriveExportPlan.mode !== "export_plan" ||
+  googleDriveExportPlan.source_video_path !== finalVideoPath ||
+  googleDriveExportPlan.filename !== `${realSendJobId}.mp4` ||
+  googleDriveExportPlan.title !== sampleJob.title ||
+  googleDriveExportPlan.description !== null ||
+  googleDriveExportPlan.target?.type !== "google_drive_folder" ||
+  googleDriveExportPlan.target.folder_id !== "placeholder" ||
+  googleDriveExportPlan.target.folder_name !== "placeholder" ||
+  googleDriveExportPlan.publish_package_path !== publishPackagePath ||
+  googleDriveExportPlan.youtube_upload_plan_path !== youtubeUploadPlanPath ||
+  googleDriveExportPlan.safety?.will_upload !== false ||
+  googleDriveExportPlan.safety.will_make_network_request !== false ||
+  googleDriveExportPlan.safety.will_modify_video !== false ||
+  googleDriveExportPlan.metadata?.source !== "raiz_video_factory" ||
+  !googleDriveExportPlan.metadata.created_at ||
+  !existsSync(googleDriveExportPlanPath)
+) {
+  throw new Error("Expected Google Drive export plan to contain local no-upload plan fields.");
+}
+
+const googleDriveExportPlanStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/status`
+});
+const googleDriveExportPlanStatus = JSON.parse(googleDriveExportPlanStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    google_drive_export_plan_created?: boolean;
+    google_drive_export_plan_path?: string;
+  };
+};
+
+if (
+  googleDriveExportPlanStatus.status !== "rendered" ||
+  googleDriveExportPlanStatus.metadata?.google_drive_export_plan_created !== true ||
+  googleDriveExportPlanStatus.metadata.google_drive_export_plan_path !== googleDriveExportPlanPath
+) {
+  throw new Error("Expected Google Drive export plan to keep status rendered and update metadata.");
+}
+
+const googleDriveExportPlanEvents = readFileSync(resolve(realSendJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!googleDriveExportPlanEvents.some((event) => event.type === "job.google_drive_export_plan_created")) {
+  throw new Error("Expected Google Drive export plan creation to append job.google_drive_export_plan_created event.");
+}
+
+const googleDriveExportPlanArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/artifacts`
+});
+const googleDriveExportPlanArtifacts = JSON.parse(googleDriveExportPlanArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  googleDriveExportPlanArtifacts.summary?.has_google_drive_export_plan !== true ||
+  !googleDriveExportPlanArtifacts.artifacts?.some(
+    (artifact) =>
+      artifact.name === "google-drive-export.plan.json" &&
+      artifact.type === "google_drive_export_plan" &&
+      artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect google-drive-export.plan.json.");
+}
+
 const manualRejectJobId = "smoke-arabic-manual-reject-001";
 const manualRejectJobDir = await createJobThroughReviewPackage(manualRejectJobId);
 const manualRejectResponse = await server.inject({
@@ -2078,6 +2185,17 @@ if (rejectedYouTubeUploadPlanResponse.statusCode !== 409) {
   );
 }
 
+const rejectedGoogleDriveExportPlanResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${manualRejectJobId}/google-drive-export-plan`
+});
+
+if (rejectedGoogleDriveExportPlanResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected Google Drive export plan after manual rejection to return 409, got ${rejectedGoogleDriveExportPlanResponse.statusCode}.`
+  );
+}
+
 const notRenderedReviewPackageResponse = await server.inject({
   method: "POST",
   url: "/jobs/smoke-arabic-prepare-001/review-package"
@@ -2130,6 +2248,17 @@ const notRenderedYouTubeUploadPlanResponse = await server.inject({
 if (notRenderedYouTubeUploadPlanResponse.statusCode !== 409) {
   throw new Error(
     `Expected YouTube upload plan for non-rendered job to return 409, got ${notRenderedYouTubeUploadPlanResponse.statusCode}.`
+  );
+}
+
+const notRenderedGoogleDriveExportPlanResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/google-drive-export-plan"
+});
+
+if (notRenderedGoogleDriveExportPlanResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected Google Drive export plan for non-rendered job to return 409, got ${notRenderedGoogleDriveExportPlanResponse.statusCode}.`
   );
 }
 
@@ -3032,6 +3161,15 @@ const unknownYouTubeUploadPlanResponse = await server.inject({
 
 if (unknownYouTubeUploadPlanResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job YouTube upload plan to return 404, got ${unknownYouTubeUploadPlanResponse.statusCode}.`);
+}
+
+const unknownGoogleDriveExportPlanResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/google-drive-export-plan"
+});
+
+if (unknownGoogleDriveExportPlanResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job Google Drive export plan to return 404, got ${unknownGoogleDriveExportPlanResponse.statusCode}.`);
 }
 
 const adapterHealthJob = {
