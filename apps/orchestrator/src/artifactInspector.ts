@@ -18,6 +18,7 @@ export type JobArtifactType =
   | "adapter_sent_request"
   | "adapter_response"
   | "adapter_error"
+  | "output_manifest"
   | "output_dir"
   | "output_file";
 
@@ -49,6 +50,7 @@ export interface JobArtifactsInventory {
     has_short_video_maker_sent_request: boolean;
     has_short_video_maker_response: boolean;
     has_short_video_maker_error: boolean;
+    has_output_manifest: boolean;
     has_output: boolean;
   };
   created_at: string;
@@ -95,6 +97,7 @@ export async function inspectJobArtifacts(
     inspectArtifact("short-video-maker-request.sent.json", "adapter_sent_request", paths.shortVideoMakerSentRequestPath),
     inspectArtifact("short-video-maker-response.json", "adapter_response", paths.shortVideoMakerResponsePath),
     inspectArtifact("short-video-maker-error.json", "adapter_error", paths.shortVideoMakerErrorPath),
+    inspectArtifact("output-manifest.json", "output_manifest", paths.outputManifestPath),
     inspectArtifact("output", "output_dir", paths.outputDir)
   ]);
   const outputArtifacts = await inspectOutputFiles(paths.outputDir);
@@ -119,6 +122,7 @@ export async function inspectJobArtifacts(
       has_short_video_maker_sent_request: artifactExists(artifacts, "short-video-maker-request.sent.json"),
       has_short_video_maker_response: artifactExists(artifacts, "short-video-maker-response.json"),
       has_short_video_maker_error: artifactExists(artifacts, "short-video-maker-error.json"),
+      has_output_manifest: artifactExists(artifacts, "output-manifest.json"),
       has_output: artifactExists(artifacts, "output")
     },
     created_at: new Date().toISOString()

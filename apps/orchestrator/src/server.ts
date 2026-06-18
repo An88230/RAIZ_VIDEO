@@ -27,6 +27,10 @@ import {
 } from "./realHttpSenderReadiness.js";
 import { JobReadinessStateError, runReadinessReview } from "./readinessReview.js";
 import {
+  ingestShortVideoMakerOutput,
+  JobOutputIngestionStateError
+} from "./shortVideoMakerOutputIngestion.js";
+import {
   createShortVideoMakerDryRunRequest,
   JobDryRunReadinessError,
   JobDryRunStateError
@@ -515,6 +519,31 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
           error: error.message,
           http_status: error.http_status,
           artifact_path: error.artifact_path
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/ingest-output/short-video-maker", async (request, reply) => {
+    try {
+      return await ingestShortVideoMakerOutput(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (error instanceof JobOutputIngestionStateError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
         });
       }
 

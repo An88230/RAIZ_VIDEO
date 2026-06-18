@@ -57,7 +57,14 @@ const realHttpClient: HttpClient = {
       status: 202,
       ok: true,
       body: {
-        external_job_id: "mock-real-http-submit"
+        external_job_id: "mock-real-http-submit",
+        output_path: resolve(
+          storageRoot,
+          "jobs",
+          String((body as { job_id?: string }).job_id),
+          "output",
+          `${String((body as { job_id?: string }).job_id)}.mp4`
+        )
       }
     };
   }
@@ -177,6 +184,7 @@ interface ArtifactInventoryBody {
     has_short_video_maker_sent_request?: boolean;
     has_short_video_maker_response?: boolean;
     has_short_video_maker_error?: boolean;
+    has_output_manifest?: boolean;
     has_output?: boolean;
   };
 }
@@ -243,6 +251,15 @@ interface ShortVideoMakerRealHttpResponseBody {
   external_job_id?: string | null;
   request_path?: string;
   response_body?: unknown;
+}
+
+interface ShortVideoMakerOutputManifestBody {
+  adapter?: string;
+  status?: string;
+  output_path?: string | null;
+  final_video_path?: string | null;
+  checks?: Array<{ name?: string; passed?: boolean; severity?: string }>;
+  errors?: string[];
 }
 
 const validateResponse = await server.inject({
@@ -1499,6 +1516,152 @@ if (
   throw new Error("Expected artifacts endpoint to detect real HTTP sent request and response artifacts.");
 }
 
+const finalVideoPath = resolve(realSendJobDir, "output", `${realSendJobId}.mp4`);
+writeFileSync(finalVideoPath, "mock upstream video output");
+
+const outputIngestionResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realSendJobId}/ingest-output/short-video-maker`
+});
+
+if (outputIngestionResponse.statusCode !== 200) {
+  throw new Error(`Expected output ingestion to return 200, got ${outputIngestionResponse.statusCode}.`);
+}
+
+const outputManifest = JSON.parse(outputIngestionResponse.body) as ShortVideoMakerOutputManifestBody;
+const outputManifestPath = resolve(realSendJobDir, "output-manifest.json");
+
+if (
+  outputManifest.adapter !== "short_video_maker" ||
+  outputManifest.status !== "ingested" ||
+  outputManifest.output_path !== finalVideoPath ||
+  outputManifest.final_video_path !== finalVideoPath ||
+  !outputManifest.checks?.some((check) => check.name === "response_output_file_exists" && check.passed)
+) {
+  throw new Error("Expected output ingestion to return ingested manifest with final video path.");
+}
+
+if (!existsSync(outputManifestPath)) {
+  throw new Error("Expected output ingestion to create output-manifest.json.");
+}
+
+const outputIngestionStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/status`
+});
+const outputIngestionStatus = JSON.parse(outputIngestionStatusResponse.body) as {
+  status?: string;
+  output_path?: string | null;
+  metadata?: {
+    output_manifest_path?: string;
+    final_video_path?: string | null;
+  };
+};
+
+if (
+  outputIngestionStatus.status !== "rendered" ||
+  outputIngestionStatus.output_path !== finalVideoPath ||
+  outputIngestionStatus.metadata?.output_manifest_path !== outputManifestPath ||
+  outputIngestionStatus.metadata.final_video_path !== finalVideoPath
+) {
+  throw new Error("Expected output ingestion to transition rendering -> rendered with final video metadata.");
+}
+
+const outputIngestionEvents = readFileSync(resolve(realSendJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; from?: string; to?: string; adapter?: string });
+
+if (
+  !outputIngestionEvents.some((event) => event.type === "job.status_changed" && event.from === "rendering" && event.to === "rendered") ||
+  !outputIngestionEvents.some((event) => event.type === "job.output_ingested" && event.adapter === "short_video_maker")
+) {
+  throw new Error("Expected output ingestion to append rendered transition and job.output_ingested event.");
+}
+
+const outputManifestArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/artifacts`
+});
+const outputManifestArtifacts = JSON.parse(outputManifestArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  outputManifestArtifacts.summary?.has_output_manifest !== true ||
+  !outputManifestArtifacts.artifacts?.some(
+    (artifact) => artifact.name === "output-manifest.json" && artifact.type === "output_manifest" && artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect output-manifest.json.");
+}
+
+const missingOutputJobId = "smoke-arabic-output-missing-001";
+const missingOutputJobDir = await createJobThroughRealHttpSenderReadiness(missingOutputJobId);
+process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+const missingOutputSendResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${missingOutputJobId}/send-to-short-video-maker`
+});
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
+
+if (missingOutputSendResponse.statusCode !== 200) {
+  throw new Error(`Expected missing-output job to reach rendering, got ${missingOutputSendResponse.statusCode}.`);
+}
+
+const missingOutputIngestionResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${missingOutputJobId}/ingest-output/short-video-maker`
+});
+
+if (missingOutputIngestionResponse.statusCode !== 200) {
+  throw new Error(`Expected missing output ingestion to return report, got ${missingOutputIngestionResponse.statusCode}.`);
+}
+
+const missingOutputManifest = JSON.parse(missingOutputIngestionResponse.body) as ShortVideoMakerOutputManifestBody;
+const missingOutputManifestPath = resolve(missingOutputJobDir, "output-manifest.json");
+
+if (
+  missingOutputManifest.status !== "failed" ||
+  missingOutputManifest.final_video_path !== null ||
+  !missingOutputManifest.errors?.some((error) => error.includes("Declared output file was not found.")) ||
+  !existsSync(missingOutputManifestPath)
+) {
+  throw new Error("Expected missing output ingestion to write failed output manifest.");
+}
+
+const missingOutputStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${missingOutputJobId}/status`
+});
+const missingOutputStatus = JSON.parse(missingOutputStatusResponse.body) as {
+  status?: string;
+  error?: string | null;
+  metadata?: {
+    output_manifest_path?: string;
+    final_video_path?: string | null;
+  };
+};
+
+if (
+  missingOutputStatus.status !== "failed" ||
+  !missingOutputStatus.error?.includes("Output ingestion failed") ||
+  missingOutputStatus.metadata?.output_manifest_path !== missingOutputManifestPath ||
+  missingOutputStatus.metadata.final_video_path !== null
+) {
+  throw new Error("Expected missing output ingestion to transition rendering -> failed with manifest metadata.");
+}
+
+const missingOutputEvents = readFileSync(resolve(missingOutputJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; from?: string; to?: string; adapter?: string });
+
+if (
+  !missingOutputEvents.some((event) => event.type === "job.status_changed" && event.from === "rendering" && event.to === "failed") ||
+  !missingOutputEvents.some((event) => event.type === "job.output_ingestion_failed" && event.adapter === "short_video_maker")
+) {
+  throw new Error("Expected missing output ingestion to append failed transition and job.output_ingestion_failed event.");
+}
+
 const realSendFailureJobId = "smoke-arabic-real-send-failure-001";
 const realSendFailureJobDir = await createJobThroughRealHttpSenderReadiness(realSendFailureJobId);
 realHttpClientMode = "failure";
@@ -2276,6 +2439,15 @@ const unknownSenderResponse = await server.inject({
 
 if (unknownSenderResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job sender to return 404, got ${unknownSenderResponse.statusCode}.`);
+}
+
+const unknownOutputIngestionResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/ingest-output/short-video-maker"
+});
+
+if (unknownOutputIngestionResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job output ingestion to return 404, got ${unknownOutputIngestionResponse.statusCode}.`);
 }
 
 const adapterHealthJob = {
