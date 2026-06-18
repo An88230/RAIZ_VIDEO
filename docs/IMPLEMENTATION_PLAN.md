@@ -240,9 +240,30 @@ Completed scope:
 - Storage defaults remain `storage/jobs`.
 - Phase 15 does not start processes, call the network, install dependencies, modify vendor files, or generate video.
 
+## Phase 16: Planned HTTP Sender Artifact
+
+Goal: describe how RAIZ would send the short-video-maker dry-run request over HTTP in a future phase, without sending it now.
+
+Completed scope:
+
+- Added `createShortVideoMakerHttpSendPlan(jobId)`.
+- `POST /jobs/:id/http-send-plan/short-video-maker` reads local job artifacts and centralized config.
+- HTTP send plan creation requires status `preparing`.
+- HTTP send plan creation requires `metadata.ready_for_dry_run: true`.
+- HTTP send plan creation requires `metadata.dry_run_request_created: true`.
+- HTTP send plan creation requires `metadata.readiness_status: passed`.
+- HTTP send plan creation writes `storage/jobs/{job_id}/short-video-maker-http-send.plan.json`.
+- The plan records method, conservative `/render` URL, timeout, headers, dry-run request path, expected response artifact path, execution guard snapshot, and disabled safety flags.
+- The plan marks `metadata.endpoint_unconfirmed: true` because the final upstream endpoint is not confirmed yet.
+- Status remains unchanged.
+- Status metadata records the plan path and `http_send_plan_created: true`.
+- The event log receives `job.http_send_plan_created`.
+- Artifact inspection detects `short-video-maker-http-send.plan.json`.
+- No request is sent, no network call is made, no short-video-maker process is called, no render endpoint is called, no Docker process is started, no dependencies are installed, and no video is generated.
+
 One clear next task:
 
-Implement an HTTP sender planning artifact that validates config without making network calls.
+Implement the real HTTP sender behind `RAIZ_ENABLE_REAL_RENDER=true`, using the planned artifact and keeping all safety gates in place.
 
 ## Later Phases
 

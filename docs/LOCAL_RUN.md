@@ -419,6 +419,41 @@ RAIZ_STORAGE_DIR=storage/jobs
 
 `RAIZ_SHORT_VIDEO_MAKER_MODE` supports only `http` for now. `RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS` must be a positive integer. These values do not start processes, call the network, or enable real rendering by themselves.
 
+## Create HTTP Send Plan
+
+Phase 16 creates a planned HTTP sender artifact after the dry-run request exists. It validates local readiness and centralized config, but it does not call `short-video-maker`, make a network request, start a process, start Docker, or generate video.
+
+Run this after readiness passes and the dry-run request has been created:
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/http-send-plan/short-video-maker
+```
+
+This creates:
+
+```text
+storage/jobs/smoke-arabic-001/short-video-maker-http-send.plan.json
+```
+
+The plan records:
+
+```text
+method: POST
+url: http://localhost:3123/render
+timeout_ms: 120000
+headers: content-type application/json
+body_source_path: storage/jobs/{job_id}/short-video-maker-request.dry-run.json
+expected_response_artifact: storage/jobs/{job_id}/short-video-maker-response.json
+safety.will_make_network_request: false
+metadata.endpoint_unconfirmed: true
+```
+
+The job remains `preparing`. `status.json` receives `metadata.short_video_maker_http_send_plan_path` and `metadata.http_send_plan_created`. `events.ndjson` receives `job.http_send_plan_created`.
+
+Calling this before the dry-run request exists returns `409 conflict`. Unknown jobs return `404`. Invalid `RAIZ_SHORT_VIDEO_MAKER_MODE` or timeout config returns a clear config error before any network call could happen.
+
 ## Inspect Job Artifacts
 
 Phase 10 adds a read-only inventory endpoint for files under `storage/jobs/{job_id}`.
@@ -438,6 +473,7 @@ preflight-report.json
 adapter-health.short-video-maker.json
 short-video-maker-payload.json
 short-video-maker-request.dry-run.json
+short-video-maker-http-send.plan.json
 output/
 output files
 ```

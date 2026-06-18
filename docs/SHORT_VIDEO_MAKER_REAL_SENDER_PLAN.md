@@ -15,7 +15,9 @@ POST /jobs/:id/adapter-health
 POST /jobs/:id/adapter-payload/short-video-maker
 POST /jobs/:id/readiness-review
 POST /jobs/:id/adapter-dry-run/short-video-maker
+POST /jobs/:id/http-send-plan/short-video-maker
 GET /system/execution-guard
+GET /system/config
 POST /jobs/:id/send-to-short-video-maker
 ```
 
@@ -26,6 +28,8 @@ The sender currently returns:
 - No execution in both cases.
 
 The existing sender stub does not call `short-video-maker`, does not call any external render endpoint, does not start a process, does not start Docker, does not modify `vendor/`, and does not generate video.
+
+Phase 16 also creates `short-video-maker-http-send.plan.json`, a planned-only HTTP sender artifact. It records method, URL, timeout, headers, body artifact, expected response artifact, and safety flags, but it does not make a network request.
 
 ## 2. Execution Safety Gates
 
@@ -38,6 +42,7 @@ Every future real sender implementation must pass all gates before any real exec
 - `metadata.ready_for_dry_run` must be `true`.
 - `metadata.dry_run_request_created` must be `true`.
 - `storage/jobs/{job_id}/short-video-maker-request.dry-run.json` must exist.
+- `storage/jobs/{job_id}/short-video-maker-http-send.plan.json` should exist for audited HTTP execution planning.
 - Adapter health must be `healthy` or `degraded`.
 - `vendor/` must remain read-only.
 - No `npm install` inside `vendor/`.
@@ -167,6 +172,7 @@ The sender must persist the exact request and response used for execution.
 Future sender files:
 
 ```text
+storage/jobs/{job_id}/short-video-maker-http-send.plan.json
 storage/jobs/{job_id}/short-video-maker-request.sent.json
 storage/jobs/{job_id}/short-video-maker-response.json
 storage/jobs/{job_id}/short-video-maker-error.json
@@ -174,6 +180,7 @@ storage/jobs/{job_id}/short-video-maker-error.json
 
 Rules:
 
+- `short-video-maker-http-send.plan.json` records the planned HTTP request only and must set `will_make_network_request: false`.
 - `short-video-maker-request.sent.json` records the exact outbound request.
 - `short-video-maker-response.json` records a successful upstream response.
 - `short-video-maker-error.json` records a failed attempt, timeout, invalid response, or upstream error.
@@ -238,7 +245,7 @@ Phase 15:
 Implemented environment config loader and `.env.example`.
 
 Phase 16:
-Implement HTTP sender stub that still does not call network, but validates config and writes a planned execution artifact.
+Implemented HTTP sender plan artifact that validates config and writes `short-video-maker-http-send.plan.json` without network calls.
 
 Phase 17:
 Implement real HTTP sender behind `RAIZ_ENABLE_REAL_RENDER=true`.
