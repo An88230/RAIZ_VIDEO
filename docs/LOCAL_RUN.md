@@ -382,6 +382,16 @@ Real short-video-maker sender is not implemented yet.
 
 This phase proves the safety lock only. It still does not execute, send, render, install, or start Docker.
 
+## Real Sender Plan
+
+Phase 14 is documentation-only. The future real sender plan is here:
+
+```text
+docs/SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md
+```
+
+No runtime behavior changes in this phase. The protected sender still returns `403` by default and `501 Not Implemented` when `RAIZ_ENABLE_REAL_RENDER=true`.
+
 ## Inspect Job Artifacts
 
 Phase 10 adds a read-only inventory endpoint for files under `storage/jobs/{job_id}`.

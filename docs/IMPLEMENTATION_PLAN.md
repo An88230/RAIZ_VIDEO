@@ -205,9 +205,26 @@ Completed scope:
 - With `RAIZ_ENABLE_REAL_RENDER=true`, sender returns `501 Not Implemented`.
 - Even when enabled, Phase 13 does not call short-video-maker, start Docker, start a process, call a render endpoint, install dependencies, modify vendor files, or generate video.
 
+## Phase 14: Real Sender Implementation Plan
+
+Goal: document the future real short-video-maker sender before adding any execution code.
+
+Completed scope:
+
+- Added `docs/SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md`.
+- Documented the current local-only safe pipeline.
+- Documented execution safety gates.
+- Compared HTTP API, Docker service, and local process integration modes.
+- Recommended starting with HTTP API mode only.
+- Documented proposed environment variables and default safety behavior.
+- Defined the future sender input and output contract.
+- Listed future request, response, and error artifacts.
+- Documented future status transitions and failure model.
+- Confirmed Phase 14 does not implement execution, Docker, upload, workflow integration, video generation, or vendor modification.
+
 One clear next task:
 
-Add a real sender implementation plan document before any execution code is introduced.
+Implement environment config loader and `.env.example`.
 
 ## Later Phases
 
