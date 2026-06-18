@@ -2,7 +2,7 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 19 is intentionally small:
+Phase 21 is intentionally small:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
 - Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
@@ -26,6 +26,8 @@ Phase 19 is intentionally small:
 - Validate the HTTP sender contract with injectable mocked HTTP only.
 - Run a real HTTP sender readiness checklist before any real network execution.
 - Submit one guarded real HTTP request when explicitly enabled.
+- Ingest a verified local output path from the upstream response.
+- Create a local output review package without uploading or modifying the video.
 
 ## Vendor Policy
 
@@ -51,7 +53,7 @@ samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
 
-## Phase 19 Commands
+## Phase 21 Commands
 
 ```bash
 npm install
@@ -80,6 +82,8 @@ Current endpoints:
 - `GET /system/execution-guard`
 - `GET /system/config`
 - `POST /jobs/:id/send-to-short-video-maker`
+- `POST /jobs/:id/ingest-output/short-video-maker`
+- `POST /jobs/:id/review-package`
 - `GET /jobs/:id/artifacts`
 - `GET /jobs/:id/status`
 - `PATCH /jobs/:id/status`
@@ -126,7 +130,11 @@ Preflight also checks declared local voice and asset paths. Missing local voice 
 
 The real sender plan is documented in [SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md](docs/SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md). Phase 19 implements the guarded HTTP submit path. Tests inject a mocked HTTP client; real network use is manual only.
 
-`GET /jobs/:id/artifacts` returns a read-only inventory of known files under `storage/jobs/{job_id}` including job payload, status, events, render plan, preflight report, adapter health, adapter payload, dry-run request, HTTP send plan, mocked HTTP response, real HTTP sender readiness, sent request, real response, error artifact, output directory, and output files. It does not change `status.json`, append events, create files, call adapters, or render video.
+`POST /jobs/:id/ingest-output/short-video-maker` requires `status: rendering`, reads `short-video-maker-response.json`, verifies the declared local output file path exists, and writes `output-manifest.json`. A valid output transitions `rendering -> rendered`; a missing or invalid output transitions `rendering -> failed`.
+
+`POST /jobs/:id/review-package` requires `status: rendered`, reads `job.json`, `status.json`, and `output-manifest.json`, creates `review-package.json` and `review/`, updates review metadata, and appends `job.review_package_created`. It does not upload anywhere, modify the video, or call the network.
+
+`GET /jobs/:id/artifacts` returns a read-only inventory of known files under `storage/jobs/{job_id}` including job payload, status, events, render plan, preflight report, adapter health, adapter payload, dry-run request, HTTP send plan, mocked HTTP response, real HTTP sender readiness, sent request, real response, error artifact, output manifest, review package, review folder, output directory, and output files. It does not change `status.json`, append events, create files, call adapters, or render video.
 
 Execution guard values:
 

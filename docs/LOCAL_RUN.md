@@ -397,6 +397,49 @@ and moves the job to `failed`. Failures before an attempted request, such as mis
 
 Tests use an injected mocked HTTP client. Real network use is manual only. The sender does not start Docker, mutate `vendor/`, upload to YouTube or Drive, run n8n, or generate video.
 
+## Ingest short-video-maker Output
+
+Phase 20 registers the local output path returned by `short-video-maker-response.json`.
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/ingest-output/short-video-maker
+```
+
+This requires `status: rendering`. If the declared output file exists, the endpoint creates:
+
+```text
+storage/jobs/smoke-arabic-001/output-manifest.json
+```
+
+and transitions:
+
+```text
+rendering -> rendered
+```
+
+If the declared output path is missing or invalid, the endpoint writes a failed manifest and transitions `rendering -> failed`.
+
+## Create Output Review Package
+
+Phase 21 creates a local review package after output ingestion. It does not upload anywhere, modify the video, call the network, start Docker, or use YouTube, Drive, or n8n.
+
+```bash
+curl -s \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/review-package
+```
+
+This requires `status: rendered` and reads `job.json`, `status.json`, and `output-manifest.json`. It creates:
+
+```text
+storage/jobs/smoke-arabic-001/review-package.json
+storage/jobs/smoke-arabic-001/review/
+```
+
+`status.json` receives `metadata.review_package_path`, `metadata.review_folder_path`, and `metadata.review_package_created: true`. The event log receives `job.review_package_created`.
+
 ## Real Sender Plan
 
 Phase 14 is documentation-only. The future real sender plan is here:
@@ -568,6 +611,9 @@ real-http-sender-readiness.json
 short-video-maker-request.sent.json
 short-video-maker-response.json
 short-video-maker-error.json
+output-manifest.json
+review-package.json
+review/
 output/
 output files
 ```

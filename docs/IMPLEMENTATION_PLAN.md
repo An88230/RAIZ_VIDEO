@@ -325,9 +325,44 @@ Completed scope:
 - Artifact inspection detects sent request, response, and error artifacts.
 - No Docker process is started, no vendor files are modified, no YouTube or Drive integration is added, no n8n workflow is added, and no video is generated.
 
+## Phase 20: Output Ingestion
+
+Goal: register a produced local video after the guarded HTTP submit reports an output path.
+
+Completed scope:
+
+- Added `ingestShortVideoMakerOutput(jobId)`.
+- Added `POST /jobs/:id/ingest-output/short-video-maker`.
+- Output ingestion requires status `rendering`.
+- Output ingestion reads `short-video-maker-response.json`.
+- If the declared output file exists, ingestion writes `output-manifest.json` and transitions `rendering -> rendered`.
+- If the output path is missing or invalid, ingestion writes a failed `output-manifest.json` and transitions `rendering -> failed`.
+- Status metadata records `output_manifest_path` and `final_video_path`.
+- The event log receives `job.output_ingested` or `job.output_ingestion_failed`.
+- Artifact inspection detects `output-manifest.json`.
+- No Docker process is started, no vendor files are modified, no YouTube or Drive integration is added, no n8n workflow is added, and no video is generated.
+
+## Phase 21: Output Review Package
+
+Goal: create a local review package after successful output ingestion.
+
+Completed scope:
+
+- Added `createOutputReviewPackage(jobId)`.
+- Added `POST /jobs/:id/review-package`.
+- Review package creation requires status `rendered`.
+- Review package creation reads `job.json`, `status.json`, and `output-manifest.json`.
+- Review package creation writes `storage/jobs/{job_id}/review-package.json`.
+- Review package creation creates `storage/jobs/{job_id}/review/`.
+- The package includes final video path, job summary, render metadata, timestamps, warnings, and errors.
+- Status metadata records `review_package_path`, `review_folder_path`, and `review_package_created: true`.
+- The event log receives `job.review_package_created`.
+- Artifact inspection detects `review-package.json` and `review/`.
+- No upload, video modification, network call, Docker start, vendor mutation, YouTube, Drive, or n8n integration occurs.
+
 One clear next task:
 
-Add a render-result polling or completion check that can move `rendering -> rendered` only after a verified output artifact exists.
+Add a manual review decision gate that can approve or reject the reviewed output before any publishing or upload integration.
 
 ## Later Phases
 
