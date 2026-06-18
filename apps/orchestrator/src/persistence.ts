@@ -67,6 +67,7 @@ export interface JobPaths {
   manualReviewApprovalPath: string;
   manualReviewRejectionPath: string;
   publishPackagePath: string;
+  youtubeUploadPlanPath: string;
 }
 
 export class JobConflictError extends Error {
@@ -413,7 +414,8 @@ export function getJobPaths(jobId: string, options: PersistenceOptions = {}): Jo
     reviewDir: resolve(jobDir, "review"),
     manualReviewApprovalPath: resolve(jobDir, "manual-review-approval.json"),
     manualReviewRejectionPath: resolve(jobDir, "manual-review-rejection.json"),
-    publishPackagePath: resolve(jobDir, "publish-package.json")
+    publishPackagePath: resolve(jobDir, "publish-package.json"),
+    youtubeUploadPlanPath: resolve(jobDir, "youtube-upload.plan.json")
   };
 }
 

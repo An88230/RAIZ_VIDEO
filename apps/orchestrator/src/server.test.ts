@@ -190,6 +190,7 @@ interface ArtifactInventoryBody {
     has_manual_review_approval?: boolean;
     has_manual_review_rejection?: boolean;
     has_publish_package?: boolean;
+    has_youtube_upload_plan?: boolean;
     has_output?: boolean;
   };
 }
@@ -311,6 +312,27 @@ interface PublishPackageBody {
     reviewer_note?: string | null;
     approval_path?: string;
     approved_at?: string;
+  };
+  metadata?: {
+    source?: string;
+    created_at?: string;
+  };
+}
+
+interface YouTubeUploadPlanBody {
+  platform?: string;
+  mode?: string;
+  video_path?: string;
+  title?: string;
+  description?: string | null;
+  tags?: string[];
+  privacyStatus?: string;
+  made_for_kids?: boolean;
+  publish_package_path?: string;
+  safety?: {
+    will_upload?: boolean;
+    will_make_network_request?: boolean;
+    will_modify_video?: boolean;
   };
   metadata?: {
     source?: string;
@@ -1885,6 +1907,82 @@ if (
   throw new Error("Expected artifacts endpoint to detect publish-package.json.");
 }
 
+const youtubeUploadPlanResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realSendJobId}/youtube-upload-plan`
+});
+
+if (youtubeUploadPlanResponse.statusCode !== 200) {
+  throw new Error(`Expected YouTube upload plan creation to return 200, got ${youtubeUploadPlanResponse.statusCode}.`);
+}
+
+const youtubeUploadPlan = JSON.parse(youtubeUploadPlanResponse.body) as YouTubeUploadPlanBody;
+const youtubeUploadPlanPath = resolve(realSendJobDir, "youtube-upload.plan.json");
+
+if (
+  youtubeUploadPlan.platform !== "youtube" ||
+  youtubeUploadPlan.mode !== "upload_plan" ||
+  youtubeUploadPlan.video_path !== finalVideoPath ||
+  youtubeUploadPlan.title !== sampleJob.title ||
+  youtubeUploadPlan.description !== null ||
+  !Array.isArray(youtubeUploadPlan.tags) ||
+  youtubeUploadPlan.privacyStatus !== "placeholder" ||
+  youtubeUploadPlan.made_for_kids !== false ||
+  youtubeUploadPlan.publish_package_path !== publishPackagePath ||
+  youtubeUploadPlan.safety?.will_upload !== false ||
+  youtubeUploadPlan.safety.will_make_network_request !== false ||
+  youtubeUploadPlan.safety.will_modify_video !== false ||
+  youtubeUploadPlan.metadata?.source !== "raiz_video_factory" ||
+  !youtubeUploadPlan.metadata.created_at ||
+  !existsSync(youtubeUploadPlanPath)
+) {
+  throw new Error("Expected YouTube upload plan to contain local no-upload plan fields.");
+}
+
+const youtubeUploadPlanStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/status`
+});
+const youtubeUploadPlanStatus = JSON.parse(youtubeUploadPlanStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    youtube_upload_plan_created?: boolean;
+    youtube_upload_plan_path?: string;
+  };
+};
+
+if (
+  youtubeUploadPlanStatus.status !== "rendered" ||
+  youtubeUploadPlanStatus.metadata?.youtube_upload_plan_created !== true ||
+  youtubeUploadPlanStatus.metadata.youtube_upload_plan_path !== youtubeUploadPlanPath
+) {
+  throw new Error("Expected YouTube upload plan to keep status rendered and update metadata.");
+}
+
+const youtubeUploadPlanEvents = readFileSync(resolve(realSendJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!youtubeUploadPlanEvents.some((event) => event.type === "job.youtube_upload_plan_created")) {
+  throw new Error("Expected YouTube upload plan creation to append job.youtube_upload_plan_created event.");
+}
+
+const youtubeUploadPlanArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/artifacts`
+});
+const youtubeUploadPlanArtifacts = JSON.parse(youtubeUploadPlanArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  youtubeUploadPlanArtifacts.summary?.has_youtube_upload_plan !== true ||
+  !youtubeUploadPlanArtifacts.artifacts?.some(
+    (artifact) => artifact.name === "youtube-upload.plan.json" && artifact.type === "youtube_upload_plan" && artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect youtube-upload.plan.json.");
+}
+
 const manualRejectJobId = "smoke-arabic-manual-reject-001";
 const manualRejectJobDir = await createJobThroughReviewPackage(manualRejectJobId);
 const manualRejectResponse = await server.inject({
@@ -1969,6 +2067,17 @@ if (rejectedPublishPackageResponse.statusCode !== 409) {
   );
 }
 
+const rejectedYouTubeUploadPlanResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${manualRejectJobId}/youtube-upload-plan`
+});
+
+if (rejectedYouTubeUploadPlanResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected YouTube upload plan after manual rejection to return 409, got ${rejectedYouTubeUploadPlanResponse.statusCode}.`
+  );
+}
+
 const notRenderedReviewPackageResponse = await server.inject({
   method: "POST",
   url: "/jobs/smoke-arabic-prepare-001/review-package"
@@ -2010,6 +2119,17 @@ const notRenderedPublishPackageResponse = await server.inject({
 if (notRenderedPublishPackageResponse.statusCode !== 409) {
   throw new Error(
     `Expected publish package for non-rendered job to return 409, got ${notRenderedPublishPackageResponse.statusCode}.`
+  );
+}
+
+const notRenderedYouTubeUploadPlanResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/youtube-upload-plan"
+});
+
+if (notRenderedYouTubeUploadPlanResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected YouTube upload plan for non-rendered job to return 409, got ${notRenderedYouTubeUploadPlanResponse.statusCode}.`
   );
 }
 
@@ -2903,6 +3023,15 @@ const unknownPublishPackageResponse = await server.inject({
 
 if (unknownPublishPackageResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job publish package to return 404, got ${unknownPublishPackageResponse.statusCode}.`);
+}
+
+const unknownYouTubeUploadPlanResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/youtube-upload-plan"
+});
+
+if (unknownYouTubeUploadPlanResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job YouTube upload plan to return 404, got ${unknownYouTubeUploadPlanResponse.statusCode}.`);
 }
 
 const adapterHealthJob = {

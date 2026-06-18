@@ -24,6 +24,7 @@ export type JobArtifactType =
   | "manual_review_approval"
   | "manual_review_rejection"
   | "publish_package"
+  | "youtube_upload_plan"
   | "output_dir"
   | "output_file";
 
@@ -61,6 +62,7 @@ export interface JobArtifactsInventory {
     has_manual_review_approval: boolean;
     has_manual_review_rejection: boolean;
     has_publish_package: boolean;
+    has_youtube_upload_plan: boolean;
     has_output: boolean;
   };
   created_at: string;
@@ -113,6 +115,7 @@ export async function inspectJobArtifacts(
     inspectArtifact("manual-review-approval.json", "manual_review_approval", paths.manualReviewApprovalPath),
     inspectArtifact("manual-review-rejection.json", "manual_review_rejection", paths.manualReviewRejectionPath),
     inspectArtifact("publish-package.json", "publish_package", paths.publishPackagePath),
+    inspectArtifact("youtube-upload.plan.json", "youtube_upload_plan", paths.youtubeUploadPlanPath),
     inspectArtifact("output", "output_dir", paths.outputDir)
   ]);
   const outputArtifacts = await inspectOutputFiles(paths.outputDir);
@@ -143,6 +146,7 @@ export async function inspectJobArtifacts(
       has_manual_review_approval: artifactExists(artifacts, "manual-review-approval.json"),
       has_manual_review_rejection: artifactExists(artifacts, "manual-review-rejection.json"),
       has_publish_package: artifactExists(artifacts, "publish-package.json"),
+      has_youtube_upload_plan: artifactExists(artifacts, "youtube-upload.plan.json"),
       has_output: artifactExists(artifacts, "output")
     },
     created_at: new Date().toISOString()

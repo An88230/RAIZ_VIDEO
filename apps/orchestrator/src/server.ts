@@ -31,6 +31,12 @@ import {
   JobPublishPackageArtifactError,
   JobPublishPackageStateError
 } from "./publishPackage.js";
+import {
+  createYouTubeUploadPlan,
+  JobYouTubeUploadPlanArtifactError,
+  JobYouTubeUploadPlanReadinessError,
+  JobYouTubeUploadPlanStateError
+} from "./youtubeUploadPlan.js";
 import { JobMockRenderPreflightError, JobMockRenderStateError, runMockRender } from "./mockRender.js";
 import { JobPreflightStateError, runPreflight } from "./preflight.js";
 import {
@@ -673,6 +679,35 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
         error instanceof JobPublishPackageStateError ||
         error instanceof JobPublishPackageApprovalError ||
         error instanceof JobPublishPackageArtifactError
+      ) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/youtube-upload-plan", async (request, reply) => {
+    try {
+      return await createYouTubeUploadPlan(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (
+        error instanceof JobYouTubeUploadPlanStateError ||
+        error instanceof JobYouTubeUploadPlanReadinessError ||
+        error instanceof JobYouTubeUploadPlanArtifactError
       ) {
         return reply.code(409).send({
           status: "conflict",
