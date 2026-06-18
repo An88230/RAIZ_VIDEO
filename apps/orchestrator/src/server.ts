@@ -8,6 +8,12 @@ import { getExecutionGuard } from "./executionGuard.js";
 import { createFetchHttpClient } from "./httpClient.js";
 import { inspectJobArtifacts } from "./artifactInspector.js";
 import {
+  approveOutputForPublish,
+  JobManualReviewPackageError,
+  JobManualReviewStateError,
+  rejectOutputForPublish
+} from "./manualReviewGate.js";
+import {
   createShortVideoMakerPayload,
   createJobRecord,
   getJobStatus,
@@ -102,6 +108,10 @@ interface PatchJobStatusBody {
   output_path?: string | null;
   error?: string | null;
   metadata?: Record<string, unknown>;
+}
+
+interface ManualReviewBody {
+  reviewerNote?: unknown;
 }
 
 export function createServer(options: CreateServerOptions = {}): FastifyInstance {
@@ -584,6 +594,62 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
     }
   });
 
+  server.post<{ Params: { id: string }; Body: ManualReviewBody }>(
+    "/jobs/:id/manual-review/approve",
+    async (request, reply) => {
+      try {
+        return await approveOutputForPublish(request.params.id, getReviewerNote(request.body), {
+          storageRoot: options.storageRoot
+        });
+      } catch (error) {
+        if (error instanceof JobNotFoundError) {
+          return reply.code(404).send({
+            status: "not_found",
+            job_id: request.params.id
+          });
+        }
+
+        if (error instanceof JobManualReviewStateError || error instanceof JobManualReviewPackageError) {
+          return reply.code(409).send({
+            status: "conflict",
+            job_id: request.params.id,
+            error: error.message
+          });
+        }
+
+        throw error;
+      }
+    }
+  );
+
+  server.post<{ Params: { id: string }; Body: ManualReviewBody }>(
+    "/jobs/:id/manual-review/reject",
+    async (request, reply) => {
+      try {
+        return await rejectOutputForPublish(request.params.id, getReviewerNote(request.body), {
+          storageRoot: options.storageRoot
+        });
+      } catch (error) {
+        if (error instanceof JobNotFoundError) {
+          return reply.code(404).send({
+            status: "not_found",
+            job_id: request.params.id
+          });
+        }
+
+        if (error instanceof JobManualReviewStateError || error instanceof JobManualReviewPackageError) {
+          return reply.code(409).send({
+            status: "conflict",
+            job_id: request.params.id,
+            error: error.message
+          });
+        }
+
+        throw error;
+      }
+    }
+  );
+
   server.patch<{ Params: { id: string }; Body: PatchJobStatusBody }>("/jobs/:id/status", async (request, reply) => {
     if (!isLocalJobStatus(request.body.status)) {
       return reply.code(400).send({
@@ -621,4 +687,8 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
   });
 
   return server;
+}
+
+function getReviewerNote(body: ManualReviewBody | undefined): string | undefined {
+  return typeof body?.reviewerNote === "string" ? body.reviewerNote : undefined;
 }

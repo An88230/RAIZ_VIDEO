@@ -187,6 +187,8 @@ interface ArtifactInventoryBody {
     has_output_manifest?: boolean;
     has_review_package?: boolean;
     has_review_folder?: boolean;
+    has_manual_review_approval?: boolean;
+    has_manual_review_rejection?: boolean;
     has_output?: boolean;
   };
 }
@@ -286,6 +288,14 @@ interface OutputReviewPackageBody {
   };
   warnings?: string[];
   errors?: string[];
+}
+
+interface ManualReviewDecisionBody {
+  status?: string;
+  reviewer_note?: string | null;
+  review_package_path?: string;
+  approved_at?: string;
+  rejected_at?: string;
 }
 
 const validateResponse = await server.inject({
@@ -1707,6 +1717,151 @@ if (
   throw new Error("Expected artifacts endpoint to detect review-package.json and review/ folder.");
 }
 
+const manualApprovalResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realSendJobId}/manual-review/approve`,
+  payload: {
+    reviewerNote: "Approved for local publish gate."
+  }
+});
+
+if (manualApprovalResponse.statusCode !== 200) {
+  throw new Error(`Expected manual approval to return 200, got ${manualApprovalResponse.statusCode}.`);
+}
+
+const manualApproval = JSON.parse(manualApprovalResponse.body) as ManualReviewDecisionBody;
+const manualApprovalPath = resolve(realSendJobDir, "manual-review-approval.json");
+
+if (
+  manualApproval.status !== "approved" ||
+  manualApproval.reviewer_note !== "Approved for local publish gate." ||
+  manualApproval.review_package_path !== reviewPackagePath ||
+  !manualApproval.approved_at ||
+  !existsSync(manualApprovalPath)
+) {
+  throw new Error("Expected manual approval to write approval artifact with reviewer note.");
+}
+
+const manualApprovalStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/status`
+});
+const manualApprovalStatus = JSON.parse(manualApprovalStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    manual_review_approved?: boolean;
+    manual_review_approval_path?: string;
+  };
+};
+
+if (
+  manualApprovalStatus.status !== "rendered" ||
+  manualApprovalStatus.metadata?.manual_review_approved !== true ||
+  manualApprovalStatus.metadata.manual_review_approval_path !== manualApprovalPath
+) {
+  throw new Error("Expected manual approval to keep status rendered and update approval metadata.");
+}
+
+const manualApprovalEvents = readFileSync(resolve(realSendJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!manualApprovalEvents.some((event) => event.type === "job.manual_review_approved")) {
+  throw new Error("Expected manual approval to append job.manual_review_approved event.");
+}
+
+const manualApprovalArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/artifacts`
+});
+const manualApprovalArtifacts = JSON.parse(manualApprovalArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  manualApprovalArtifacts.summary?.has_manual_review_approval !== true ||
+  !manualApprovalArtifacts.artifacts?.some(
+    (artifact) =>
+      artifact.name === "manual-review-approval.json" &&
+      artifact.type === "manual_review_approval" &&
+      artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect manual-review-approval.json.");
+}
+
+const manualRejectJobId = "smoke-arabic-manual-reject-001";
+const manualRejectJobDir = await createJobThroughReviewPackage(manualRejectJobId);
+const manualRejectResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${manualRejectJobId}/manual-review/reject`,
+  payload: {
+    reviewerNote: "Rejected for local review."
+  }
+});
+
+if (manualRejectResponse.statusCode !== 200) {
+  throw new Error(`Expected manual rejection to return 200, got ${manualRejectResponse.statusCode}.`);
+}
+
+const manualRejection = JSON.parse(manualRejectResponse.body) as ManualReviewDecisionBody;
+const manualRejectionPath = resolve(manualRejectJobDir, "manual-review-rejection.json");
+
+if (
+  manualRejection.status !== "rejected" ||
+  manualRejection.reviewer_note !== "Rejected for local review." ||
+  !manualRejection.rejected_at ||
+  !existsSync(manualRejectionPath)
+) {
+  throw new Error("Expected manual rejection to write rejection artifact with reviewer note.");
+}
+
+const manualRejectionStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${manualRejectJobId}/status`
+});
+const manualRejectionStatus = JSON.parse(manualRejectionStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    manual_review_approved?: boolean;
+    manual_review_rejection_path?: string;
+  };
+};
+
+if (
+  manualRejectionStatus.status !== "rendered" ||
+  manualRejectionStatus.metadata?.manual_review_approved !== false ||
+  manualRejectionStatus.metadata.manual_review_rejection_path !== manualRejectionPath
+) {
+  throw new Error("Expected manual rejection to keep status rendered and update rejection metadata.");
+}
+
+const manualRejectionEvents = readFileSync(resolve(manualRejectJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!manualRejectionEvents.some((event) => event.type === "job.manual_review_rejected")) {
+  throw new Error("Expected manual rejection to append job.manual_review_rejected event.");
+}
+
+const manualRejectionArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${manualRejectJobId}/artifacts`
+});
+const manualRejectionArtifacts = JSON.parse(manualRejectionArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  manualRejectionArtifacts.summary?.has_manual_review_rejection !== true ||
+  !manualRejectionArtifacts.artifacts?.some(
+    (artifact) =>
+      artifact.name === "manual-review-rejection.json" &&
+      artifact.type === "manual_review_rejection" &&
+      artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect manual-review-rejection.json.");
+}
+
 const notRenderedReviewPackageResponse = await server.inject({
   method: "POST",
   url: "/jobs/smoke-arabic-prepare-001/review-package"
@@ -1715,6 +1870,28 @@ const notRenderedReviewPackageResponse = await server.inject({
 if (notRenderedReviewPackageResponse.statusCode !== 409) {
   throw new Error(
     `Expected review package for non-rendered job to return 409, got ${notRenderedReviewPackageResponse.statusCode}.`
+  );
+}
+
+const notRenderedManualApprovalResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/manual-review/approve"
+});
+
+if (notRenderedManualApprovalResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected manual approval for non-rendered job to return 409, got ${notRenderedManualApprovalResponse.statusCode}.`
+  );
+}
+
+const notRenderedManualRejectionResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/manual-review/reject"
+});
+
+if (notRenderedManualRejectionResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected manual rejection for non-rendered job to return 409, got ${notRenderedManualRejectionResponse.statusCode}.`
   );
 }
 
@@ -2583,6 +2760,24 @@ if (unknownReviewPackageResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job review package to return 404, got ${unknownReviewPackageResponse.statusCode}.`);
 }
 
+const unknownManualApprovalResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/manual-review/approve"
+});
+
+if (unknownManualApprovalResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job manual approval to return 404, got ${unknownManualApprovalResponse.statusCode}.`);
+}
+
+const unknownManualRejectionResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/manual-review/reject"
+});
+
+if (unknownManualRejectionResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job manual rejection to return 404, got ${unknownManualRejectionResponse.statusCode}.`);
+}
+
 const adapterHealthJob = {
   ...sampleJob,
   job_id: "smoke-arabic-adapter-health-001",
@@ -2796,6 +2991,32 @@ async function createJobThroughRealHttpSenderReadiness(jobId: string): Promise<s
     server.inject({ method: "POST", url: `/jobs/${jobId}/real-http-sender-readiness` }),
     200,
     `real HTTP sender readiness ${jobId}`
+  );
+
+  return jobDir;
+}
+
+async function createJobThroughReviewPackage(jobId: string): Promise<string> {
+  const jobDir = await createJobThroughRealHttpSenderReadiness(jobId);
+  const finalOutputPath = resolve(jobDir, "output", `${jobId}.mp4`);
+
+  process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+  await expectStatus(
+    server.inject({ method: "POST", url: `/jobs/${jobId}/send-to-short-video-maker` }),
+    200,
+    `real HTTP sender ${jobId}`
+  );
+  delete process.env.RAIZ_ENABLE_REAL_RENDER;
+  writeFileSync(finalOutputPath, "mock upstream video output for review package");
+  await expectStatus(
+    server.inject({ method: "POST", url: `/jobs/${jobId}/ingest-output/short-video-maker` }),
+    200,
+    `output ingestion ${jobId}`
+  );
+  await expectStatus(
+    server.inject({ method: "POST", url: `/jobs/${jobId}/review-package` }),
+    200,
+    `review package ${jobId}`
   );
 
   return jobDir;

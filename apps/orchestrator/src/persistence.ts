@@ -64,6 +64,8 @@ export interface JobPaths {
   outputManifestPath: string;
   reviewPackagePath: string;
   reviewDir: string;
+  manualReviewApprovalPath: string;
+  manualReviewRejectionPath: string;
 }
 
 export class JobConflictError extends Error {
@@ -407,7 +409,9 @@ export function getJobPaths(jobId: string, options: PersistenceOptions = {}): Jo
     shortVideoMakerErrorPath: resolve(jobDir, "short-video-maker-error.json"),
     outputManifestPath: resolve(jobDir, "output-manifest.json"),
     reviewPackagePath: resolve(jobDir, "review-package.json"),
-    reviewDir: resolve(jobDir, "review")
+    reviewDir: resolve(jobDir, "review"),
+    manualReviewApprovalPath: resolve(jobDir, "manual-review-approval.json"),
+    manualReviewRejectionPath: resolve(jobDir, "manual-review-rejection.json")
   };
 }
 
