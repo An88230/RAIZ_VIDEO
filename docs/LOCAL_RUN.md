@@ -334,6 +334,54 @@ The job remains `preparing`. `status.json` receives `metadata.short_video_maker_
 
 Calling this before readiness passes returns `409 conflict`. Unknown jobs return `404`.
 
+## Check Execution Guard
+
+Phase 13 adds a mandatory safety lock before any real adapter execution.
+
+```bash
+curl -s http://localhost:4000/system/execution-guard
+```
+
+Default behavior is blocked:
+
+```text
+RAIZ_ENABLE_REAL_RENDER=false
+```
+
+Only this exact value enables the guard state:
+
+```text
+RAIZ_ENABLE_REAL_RENDER=true
+```
+
+Even when enabled, Phase 13 does not send anything and does not implement real rendering.
+
+## Try Protected Sender Stub
+
+The protected sender reads the dry-run request artifact and validates local readiness, but it is still a stub.
+
+```bash
+curl -i \
+  -X POST \
+  http://localhost:4000/jobs/smoke-arabic-001/send-to-short-video-maker
+```
+
+With the default guard, the response is `403`. It does not change `status.json`, append events, start a process, call `short-video-maker`, or generate video.
+
+With the guard explicitly enabled:
+
+```bash
+RAIZ_ENABLE_REAL_RENDER=true npm run dev:orchestrator
+```
+
+The same request returns `501 Not Implemented`:
+
+```text
+Real short-video-maker sender is not implemented yet.
+```
+
+This phase proves the safety lock only. It still does not execute, send, render, install, or start Docker.
+
 ## Inspect Job Artifacts
 
 Phase 10 adds a read-only inventory endpoint for files under `storage/jobs/{job_id}`.

@@ -189,9 +189,25 @@ Completed scope:
 - Artifact inspection detects `short-video-maker-request.dry-run.json`.
 - No request is sent, no short-video-maker process is called, no render endpoint is called, no Docker process is started, no dependencies are installed, and no video is generated.
 
+## Phase 13: Execution Guard Safety Lock
+
+Goal: prevent any real adapter execution unless explicitly enabled.
+
+Completed scope:
+
+- `getExecutionGuard()` reads `RAIZ_ENABLE_REAL_RENDER`.
+- `assertRealRenderAllowed()` throws when real rendering is disabled.
+- Real rendering is blocked by default.
+- `RAIZ_ENABLE_REAL_RENDER=true` is the only value that allows the guard state.
+- `GET /system/execution-guard` reports current guard policy.
+- `POST /jobs/:id/send-to-short-video-maker` validates job state and dry-run request presence.
+- With the default guard, sender returns `403` without changing status or appending events.
+- With `RAIZ_ENABLE_REAL_RENDER=true`, sender returns `501 Not Implemented`.
+- Even when enabled, Phase 13 does not call short-video-maker, start Docker, start a process, call a render endpoint, install dependencies, modify vendor files, or generate video.
+
 One clear next task:
 
-Add a controlled local dry-run sender stub that can be enabled later behind an explicit execution flag.
+Add a real sender implementation plan document before any execution code is introduced.
 
 ## Later Phases
 
