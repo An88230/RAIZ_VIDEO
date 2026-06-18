@@ -10,6 +10,7 @@ import {
   RealRenderExecutionDisabledError
 } from "./executionGuard.js";
 import { createServer } from "./server.js";
+import { sendShortVideoMakerWithMockedHttp, type HttpClient } from "./shortVideoMakerMockHttpSender.js";
 
 const managedEnvKeys = [
   "RAIZ_ENABLE_REAL_RENDER",
@@ -137,6 +138,7 @@ interface ArtifactInventoryBody {
     has_short_video_maker_payload?: boolean;
     has_short_video_maker_dry_run_request?: boolean;
     has_short_video_maker_http_send_plan?: boolean;
+    has_short_video_maker_mock_response?: boolean;
     has_output?: boolean;
   };
 }
@@ -176,6 +178,16 @@ interface ShortVideoMakerHttpSendPlanBody {
   headers?: { "content-type"?: string };
   body_source_path?: string;
   safety?: { will_make_network_request?: boolean };
+}
+
+interface ShortVideoMakerMockHttpResponseBody {
+  adapter?: string;
+  mode?: string;
+  status?: string;
+  http_status?: number;
+  external_job_id?: string;
+  request_plan_path?: string;
+  metadata?: { mocked?: boolean };
 }
 
 const validateResponse = await server.inject({
@@ -1059,6 +1071,170 @@ if (
   throw new Error("Expected artifacts endpoint to detect short-video-maker HTTP send plan.");
 }
 
+const statusBeforeBlockedMockHttpSend = readFileSync(resolve(prepareJobDir, "status.json"), "utf8");
+const eventsBeforeBlockedMockHttpSend = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8");
+const blockedMockHttpSendResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/http-send-mock/short-video-maker"
+});
+
+if (blockedMockHttpSendResponse.statusCode !== 403) {
+  throw new Error(`Expected mocked HTTP sender to return 403 by default, got ${blockedMockHttpSendResponse.statusCode}.`);
+}
+
+if (
+  readFileSync(resolve(prepareJobDir, "status.json"), "utf8") !== statusBeforeBlockedMockHttpSend ||
+  readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8") !== eventsBeforeBlockedMockHttpSend
+) {
+  throw new Error("Expected blocked mocked HTTP sender to leave status.json and events.ndjson unchanged.");
+}
+
+const originalFetch = globalThis.fetch;
+let globalFetchCalled = false;
+globalThis.fetch = (async () => {
+  globalFetchCalled = true;
+  throw new Error("Global fetch must not be used by mocked HTTP sender.");
+}) as typeof fetch;
+
+process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+const enabledMockHttpSendResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/http-send-mock/short-video-maker"
+});
+
+if (enabledMockHttpSendResponse.statusCode !== 200) {
+  globalThis.fetch = originalFetch;
+  delete process.env.RAIZ_ENABLE_REAL_RENDER;
+  throw new Error(`Expected enabled mocked HTTP sender to return 200, got ${enabledMockHttpSendResponse.statusCode}.`);
+}
+
+const enabledMockHttpSend = JSON.parse(enabledMockHttpSendResponse.body) as ShortVideoMakerMockHttpResponseBody;
+const mockHttpResponsePath = resolve(prepareJobDir, "short-video-maker-response.mock.json");
+
+if (
+  enabledMockHttpSend.adapter !== "short_video_maker" ||
+  enabledMockHttpSend.mode !== "http_mock" ||
+  enabledMockHttpSend.status !== "submitted_mock" ||
+  enabledMockHttpSend.http_status !== 202 ||
+  !enabledMockHttpSend.external_job_id?.startsWith("mock-") ||
+  enabledMockHttpSend.request_plan_path !== httpSendPlanPath ||
+  enabledMockHttpSend.metadata?.mocked !== true
+) {
+  globalThis.fetch = originalFetch;
+  delete process.env.RAIZ_ENABLE_REAL_RENDER;
+  throw new Error("Expected enabled mocked HTTP sender to return mock submission contract.");
+}
+
+if (!existsSync(mockHttpResponsePath)) {
+  globalThis.fetch = originalFetch;
+  delete process.env.RAIZ_ENABLE_REAL_RENDER;
+  throw new Error("Expected mocked HTTP sender to create short-video-maker-response.mock.json.");
+}
+
+const mockHttpStatusResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/status"
+});
+const mockHttpStatus = JSON.parse(mockHttpStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    short_video_maker_mock_response_path?: string;
+    http_mock_send_completed?: boolean;
+  };
+};
+
+if (
+  mockHttpStatus.status !== "preparing" ||
+  mockHttpStatus.metadata?.short_video_maker_mock_response_path !== mockHttpResponsePath ||
+  mockHttpStatus.metadata.http_mock_send_completed !== true
+) {
+  globalThis.fetch = originalFetch;
+  delete process.env.RAIZ_ENABLE_REAL_RENDER;
+  throw new Error("Expected mocked HTTP sender to keep status preparing and update mock response metadata.");
+}
+
+const mockHttpEvents = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string; adapter?: string });
+
+if (
+  !mockHttpEvents.some(
+    (event) => event.type === "job.http_mock_send_completed" && event.adapter === "short_video_maker"
+  )
+) {
+  globalThis.fetch = originalFetch;
+  delete process.env.RAIZ_ENABLE_REAL_RENDER;
+  throw new Error("Expected mocked HTTP sender to append job.http_mock_send_completed event.");
+}
+
+const mockHttpArtifactsResponse = await server.inject({
+  method: "GET",
+  url: "/jobs/smoke-arabic-prepare-001/artifacts"
+});
+
+if (mockHttpArtifactsResponse.statusCode !== 200) {
+  globalThis.fetch = originalFetch;
+  delete process.env.RAIZ_ENABLE_REAL_RENDER;
+  throw new Error(`Expected artifacts endpoint to work after mocked HTTP send, got ${mockHttpArtifactsResponse.statusCode}.`);
+}
+
+const mockHttpArtifacts = JSON.parse(mockHttpArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  mockHttpArtifacts.summary?.has_short_video_maker_mock_response !== true ||
+  !mockHttpArtifacts.artifacts?.some(
+    (artifact) =>
+      artifact.name === "short-video-maker-response.mock.json" &&
+      artifact.type === "adapter_http_mock_response" &&
+      artifact.exists
+  )
+) {
+  globalThis.fetch = originalFetch;
+  delete process.env.RAIZ_ENABLE_REAL_RENDER;
+  throw new Error("Expected artifacts endpoint to detect short-video-maker mocked HTTP response.");
+}
+
+let injectedMockClientCalls = 0;
+const injectedMockClient: HttpClient = {
+  async post(url, body, options) {
+    injectedMockClientCalls += 1;
+
+    if (
+      url !== "http://localhost:3123/render" ||
+      !body ||
+      options?.timeoutMs !== 120000 ||
+      options.headers?.["content-type"] !== "application/json"
+    ) {
+      throw new Error("Expected injected mock client to receive deterministic HTTP send plan details.");
+    }
+
+    return {
+      status: 202,
+      ok: true,
+      body: {
+        external_job_id: "mock-injected-http-send"
+      }
+    };
+  }
+};
+
+const injectedMockResponse = await sendShortVideoMakerWithMockedHttp(
+  "smoke-arabic-prepare-001",
+  injectedMockClient,
+  { storageRoot }
+);
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
+globalThis.fetch = originalFetch;
+
+if (injectedMockClientCalls !== 1 || injectedMockResponse.external_job_id !== "mock-injected-http-send") {
+  throw new Error("Expected injected mock HTTP client to be called exactly once when guard is enabled.");
+}
+
+if (globalFetchCalled) {
+  throw new Error("Expected mocked HTTP sender to avoid global fetch and real network calls.");
+}
+
 const statusBeforeBlockedSend = readFileSync(resolve(prepareJobDir, "status.json"), "utf8");
 const eventsBeforeBlockedSend = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8");
 const blockedSendResponse = await server.inject({
@@ -1379,6 +1555,15 @@ const httpSendPlanBeforeDryRunResponse = await server.inject({
 
 if (httpSendPlanBeforeDryRunResponse.statusCode !== 409) {
   throw new Error(`Expected HTTP send plan before dry-run request to return 409, got ${httpSendPlanBeforeDryRunResponse.statusCode}.`);
+}
+
+const httpMockSendBeforePlanResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-mock-before-preflight-001/http-send-mock/short-video-maker"
+});
+
+if (httpMockSendBeforePlanResponse.statusCode !== 409) {
+  throw new Error(`Expected mocked HTTP send before HTTP plan to return 409, got ${httpMockSendBeforePlanResponse.statusCode}.`);
 }
 
 const readinessMissingHealthJob = {
@@ -1740,6 +1925,15 @@ const unknownHttpSendPlanResponse = await server.inject({
 
 if (unknownHttpSendPlanResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job HTTP send plan to return 404, got ${unknownHttpSendPlanResponse.statusCode}.`);
+}
+
+const unknownHttpMockSendResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/http-send-mock/short-video-maker"
+});
+
+if (unknownHttpMockSendResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job mocked HTTP send to return 404, got ${unknownHttpMockSendResponse.statusCode}.`);
 }
 
 const unknownSenderResponse = await server.inject({

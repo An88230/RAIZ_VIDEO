@@ -37,6 +37,12 @@ import {
   RealRenderExecutionDisabledError,
   sendToShortVideoMakerStub
 } from "./shortVideoMakerSenderStub.js";
+import {
+  JobHttpMockSendReadinessError,
+  JobHttpMockSendStateError,
+  sendShortVideoMakerWithMockedHttp,
+  type HttpClient
+} from "./shortVideoMakerMockHttpSender.js";
 import { InvalidStatusTransitionError, isLocalJobStatus } from "./statusTransitions.js";
 
 export interface CreateServerOptions {
@@ -46,6 +52,18 @@ export interface CreateServerOptions {
 }
 
 const renderAdapters = [shortVideoMakerAdapter];
+
+const internalMockHttpClient: HttpClient = {
+  async post(_url, _body) {
+    return {
+      status: 202,
+      ok: true,
+      body: {
+        external_job_id: "mock-short-video-maker-submission"
+      }
+    };
+  }
+};
 
 function getShortVideoMakerVendorPath(options: CreateServerOptions): string {
   return resolve(options.shortVideoMakerVendorPath ?? loadEnvConfig().shortVideoMakerVendorPath);
@@ -377,6 +395,39 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
       }
 
       if (error instanceof JobHttpSendPlanStateError || error instanceof JobHttpSendPlanReadinessError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/http-send-mock/short-video-maker", async (request, reply) => {
+    try {
+      return await sendShortVideoMakerWithMockedHttp(request.params.id, internalMockHttpClient, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (error instanceof RealRenderExecutionDisabledError) {
+        return reply.code(403).send({
+          status: "blocked",
+          job_id: request.params.id,
+          guard: error.guard
+        });
+      }
+
+      if (error instanceof JobHttpMockSendStateError || error instanceof JobHttpMockSendReadinessError) {
         return reply.code(409).send({
           status: "conflict",
           job_id: request.params.id,

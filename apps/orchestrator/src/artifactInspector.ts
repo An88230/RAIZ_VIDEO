@@ -13,6 +13,7 @@ export type JobArtifactType =
   | "adapter_payload"
   | "adapter_dry_run_request"
   | "adapter_http_send_plan"
+  | "adapter_http_mock_response"
   | "output_dir"
   | "output_file";
 
@@ -39,6 +40,7 @@ export interface JobArtifactsInventory {
     has_short_video_maker_payload: boolean;
     has_short_video_maker_dry_run_request: boolean;
     has_short_video_maker_http_send_plan: boolean;
+    has_short_video_maker_mock_response: boolean;
     has_output: boolean;
   };
   created_at: string;
@@ -72,6 +74,11 @@ export async function inspectJobArtifacts(
       "adapter_http_send_plan",
       paths.shortVideoMakerHttpSendPlanPath
     ),
+    inspectArtifact(
+      "short-video-maker-response.mock.json",
+      "adapter_http_mock_response",
+      paths.shortVideoMakerMockResponsePath
+    ),
     inspectArtifact("output", "output_dir", paths.outputDir)
   ]);
   const outputArtifacts = await inspectOutputFiles(paths.outputDir);
@@ -91,6 +98,7 @@ export async function inspectJobArtifacts(
       has_short_video_maker_payload: artifactExists(artifacts, "short-video-maker-payload.json"),
       has_short_video_maker_dry_run_request: artifactExists(artifacts, "short-video-maker-request.dry-run.json"),
       has_short_video_maker_http_send_plan: artifactExists(artifacts, "short-video-maker-http-send.plan.json"),
+      has_short_video_maker_mock_response: artifactExists(artifacts, "short-video-maker-response.mock.json"),
       has_output: artifactExists(artifacts, "output")
     },
     created_at: new Date().toISOString()
