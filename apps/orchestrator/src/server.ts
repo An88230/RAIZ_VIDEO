@@ -3,6 +3,7 @@ import { validateRaizJob } from "@raiz/job-schema";
 import { shortVideoMakerAdapter } from "@raiz/render-adapters";
 import { resolve } from "node:path";
 
+import { getExecutionGuard } from "./executionGuard.js";
 import { inspectJobArtifacts } from "./artifactInspector.js";
 import {
   createShortVideoMakerPayload,
@@ -24,6 +25,12 @@ import {
   JobDryRunReadinessError,
   JobDryRunStateError
 } from "./shortVideoMakerDryRunRequest.js";
+import {
+  JobShortVideoMakerSenderReadinessError,
+  JobShortVideoMakerSenderStateError,
+  RealRenderExecutionDisabledError,
+  sendToShortVideoMakerStub
+} from "./shortVideoMakerSenderStub.js";
 import { InvalidStatusTransitionError, isLocalJobStatus } from "./statusTransitions.js";
 
 export interface CreateServerOptions {
@@ -53,6 +60,10 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
     return shortVideoMakerAdapter.checkHealth?.({
       vendorPath: getShortVideoMakerVendorPath(options)
     });
+  });
+
+  server.get("/system/execution-guard", async () => {
+    return getExecutionGuard();
   });
 
   server.post("/jobs/validate", async (request, reply) => {
@@ -321,6 +332,41 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
       }
 
       if (error instanceof JobDryRunStateError || error instanceof JobDryRunReadinessError) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/send-to-short-video-maker", async (request, reply) => {
+    try {
+      const result = await sendToShortVideoMakerStub(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+
+      return reply.code(501).send(result);
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (error instanceof RealRenderExecutionDisabledError) {
+        return reply.code(403).send({
+          status: "blocked",
+          job_id: request.params.id,
+          guard: error.guard
+        });
+      }
+
+      if (error instanceof JobShortVideoMakerSenderStateError || error instanceof JobShortVideoMakerSenderReadinessError) {
         return reply.code(409).send({
           status: "conflict",
           job_id: request.params.id,

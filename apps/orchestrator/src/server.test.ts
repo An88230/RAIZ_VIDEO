@@ -3,7 +3,15 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  assertRealRenderAllowed,
+  getExecutionGuard,
+  RealRenderExecutionDisabledError
+} from "./executionGuard.js";
 import { createServer } from "./server.js";
+
+const originalRealRenderEnv = process.env.RAIZ_ENABLE_REAL_RENDER;
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const samplePath = resolve(currentDir, "../../../samples/valid-arabic-9x16-job.json");
@@ -11,6 +19,43 @@ const shortVideoMakerVendorPath = resolve(currentDir, "../../../vendor/short-vid
 const sampleJob = JSON.parse(readFileSync(samplePath, "utf8")) as Record<string, unknown>;
 const storageRoot = mkdtempSync(resolve(tmpdir(), "raiz-orchestrator-test-"));
 const server = createServer({ storageRoot, shortVideoMakerVendorPath });
+
+const defaultExecutionGuard = getExecutionGuard();
+
+if (
+  defaultExecutionGuard.real_render_enabled !== false ||
+  defaultExecutionGuard.source !== "RAIZ_ENABLE_REAL_RENDER" ||
+  defaultExecutionGuard.raw_value !== null ||
+  defaultExecutionGuard.policy !== "blocked_by_default"
+) {
+  throw new Error("Expected default execution guard to block real rendering.");
+}
+
+let disabledGuardRejected = false;
+
+try {
+  assertRealRenderAllowed();
+} catch (error) {
+  if (error instanceof RealRenderExecutionDisabledError) {
+    disabledGuardRejected = true;
+  } else {
+    throw error;
+  }
+}
+
+if (!disabledGuardRejected) {
+  throw new Error("Expected assertRealRenderAllowed to reject by default.");
+}
+
+process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+const enabledExecutionGuard = getExecutionGuard();
+
+if (enabledExecutionGuard.real_render_enabled !== true || enabledExecutionGuard.raw_value !== "true") {
+  throw new Error("Expected RAIZ_ENABLE_REAL_RENDER=true to allow guard state.");
+}
+
+assertRealRenderAllowed();
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
 
 interface ArtifactInventoryBody {
   artifacts?: Array<{ name?: string; type?: string; exists?: boolean }>;
@@ -97,6 +142,31 @@ if (
   !Array.isArray(adapterHealth.metadata?.detected_files)
 ) {
   throw new Error("Expected short-video-maker health endpoint to return a structured health report.");
+}
+
+const executionGuardResponse = await server.inject({
+  method: "GET",
+  url: "/system/execution-guard"
+});
+
+if (executionGuardResponse.statusCode !== 200) {
+  throw new Error(`Expected execution guard endpoint to return 200, got ${executionGuardResponse.statusCode}.`);
+}
+
+const executionGuardBody = JSON.parse(executionGuardResponse.body) as {
+  real_render_enabled?: boolean;
+  source?: string;
+  policy?: string;
+  message?: string;
+};
+
+if (
+  executionGuardBody.real_render_enabled !== false ||
+  executionGuardBody.source !== "RAIZ_ENABLE_REAL_RENDER" ||
+  executionGuardBody.policy !== "blocked_by_default" ||
+  !executionGuardBody.message?.includes("disabled")
+) {
+  throw new Error("Expected execution guard endpoint to report blocked-by-default state.");
 }
 
 const renderResponse = await server.inject({
@@ -697,6 +767,15 @@ if (!readinessEvents.some((event) => event.type === "job.readiness_passed")) {
   throw new Error("Expected readiness review to append job.readiness_passed event.");
 }
 
+const sendBeforeDryRunResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/send-to-short-video-maker"
+});
+
+if (sendBeforeDryRunResponse.statusCode !== 409) {
+  throw new Error(`Expected sender before dry-run request to return 409, got ${sendBeforeDryRunResponse.statusCode}.`);
+}
+
 const dryRunRequestResponse = await server.inject({
   method: "POST",
   url: "/jobs/smoke-arabic-prepare-001/adapter-dry-run/short-video-maker"
@@ -784,6 +863,64 @@ if (
   )
 ) {
   throw new Error("Expected artifacts endpoint to detect short-video-maker dry-run request.");
+}
+
+const statusBeforeBlockedSend = readFileSync(resolve(prepareJobDir, "status.json"), "utf8");
+const eventsBeforeBlockedSend = readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8");
+const blockedSendResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/send-to-short-video-maker"
+});
+
+if (blockedSendResponse.statusCode !== 403) {
+  throw new Error(`Expected blocked sender to return 403 by default, got ${blockedSendResponse.statusCode}.`);
+}
+
+const blockedSendBody = JSON.parse(blockedSendResponse.body) as {
+  status?: string;
+  guard?: { real_render_enabled?: boolean; policy?: string };
+};
+
+if (
+  blockedSendBody.status !== "blocked" ||
+  blockedSendBody.guard?.real_render_enabled !== false ||
+  blockedSendBody.guard.policy !== "blocked_by_default"
+) {
+  throw new Error("Expected blocked sender response to include execution guard details.");
+}
+
+if (
+  readFileSync(resolve(prepareJobDir, "status.json"), "utf8") !== statusBeforeBlockedSend ||
+  readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8") !== eventsBeforeBlockedSend
+) {
+  throw new Error("Expected blocked sender to leave status.json and events.ndjson unchanged.");
+}
+
+process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+const enabledSendResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/send-to-short-video-maker"
+});
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
+
+if (enabledSendResponse.statusCode !== 501) {
+  throw new Error(`Expected enabled sender stub to return 501, got ${enabledSendResponse.statusCode}.`);
+}
+
+const enabledSendBody = JSON.parse(enabledSendResponse.body) as { message?: string; status?: string };
+
+if (
+  enabledSendBody.status !== "not_implemented" ||
+  enabledSendBody.message !== "Real short-video-maker sender is not implemented yet."
+) {
+  throw new Error("Expected enabled sender stub to report not implemented without execution.");
+}
+
+if (
+  readFileSync(resolve(prepareJobDir, "status.json"), "utf8") !== statusBeforeBlockedSend ||
+  readFileSync(resolve(prepareJobDir, "events.ndjson"), "utf8") !== eventsBeforeBlockedSend
+) {
+  throw new Error("Expected enabled sender stub to leave status.json and events.ndjson unchanged.");
 }
 
 const mockRenderResponse = await server.inject({
@@ -1393,6 +1530,15 @@ if (unknownDryRunResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job dry-run request to return 404, got ${unknownDryRunResponse.statusCode}.`);
 }
 
+const unknownSenderResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/send-to-short-video-maker"
+});
+
+if (unknownSenderResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job sender to return 404, got ${unknownSenderResponse.statusCode}.`);
+}
+
 const adapterHealthJob = {
   ...sampleJob,
   job_id: "smoke-arabic-adapter-health-001",
@@ -1513,6 +1659,11 @@ if (existsSync(resolve(invalidStorageRoot, "jobs"))) {
 
 await invalidServer.close();
 await server.close();
+if (originalRealRenderEnv === undefined) {
+  delete process.env.RAIZ_ENABLE_REAL_RENDER;
+} else {
+  process.env.RAIZ_ENABLE_REAL_RENDER = originalRealRenderEnv;
+}
 rmSync(storageRoot, { force: true, recursive: true });
 rmSync(invalidStorageRoot, { force: true, recursive: true });
 console.log(`Orchestrator API skeleton validated ${sampleJob.job_id}.`);
