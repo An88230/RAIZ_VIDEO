@@ -2,7 +2,7 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 14 is intentionally small:
+Phase 15 is intentionally small:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
 - Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
@@ -21,6 +21,7 @@ Phase 14 is intentionally small:
 - Create a short-video-maker dry-run request artifact without sending or executing it.
 - Add an execution guard that blocks real adapter execution unless explicitly enabled.
 - Document the real short-video-maker sender plan before any execution code is added.
+- Centralize runtime configuration and add `.env.example`.
 
 ## Vendor Policy
 
@@ -46,7 +47,7 @@ samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
 
-## Phase 14 Commands
+## Phase 15 Commands
 
 ```bash
 npm install
@@ -70,6 +71,7 @@ Current endpoints:
 - `POST /jobs/:id/readiness-review`
 - `POST /jobs/:id/adapter-dry-run/short-video-maker`
 - `GET /system/execution-guard`
+- `GET /system/config`
 - `POST /jobs/:id/send-to-short-video-maker`
 - `GET /jobs/:id/artifacts`
 - `GET /jobs/:id/status`
@@ -105,9 +107,11 @@ Preflight also checks declared local voice and asset paths. Missing local voice 
 
 `GET /system/execution-guard` reports whether real render execution is allowed. By default, real execution is blocked unless `RAIZ_ENABLE_REAL_RENDER=true`.
 
+`GET /system/config` returns a safe view of centralized runtime config. It includes the real render flag, short-video-maker HTTP mode settings, vendor path, storage directory, and safety markers. It does not expose secrets, start processes, call the network, or alter storage.
+
 `POST /jobs/:id/send-to-short-video-maker` is a protected sender stub. With the default guard it returns `403` and does not modify status or events. With `RAIZ_ENABLE_REAL_RENDER=true`, Phase 13 still returns `501 Not Implemented`; it does not call short-video-maker, start a process, or generate video.
 
-The real sender plan is documented in [SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md](docs/SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md). Phase 14 does not change runtime behavior.
+The real sender plan is documented in [SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md](docs/SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md). Phase 15 centralizes config but does not implement real execution.
 
 `GET /jobs/:id/artifacts` returns a read-only inventory of known files under `storage/jobs/{job_id}` including job payload, status, events, render plan, preflight report, adapter health, adapter payload, output directory, and output files. It does not change `status.json`, append events, create files, call adapters, or render video.
 
@@ -117,6 +121,8 @@ Execution guard values:
 RAIZ_ENABLE_REAL_RENDER=false
 RAIZ_ENABLE_REAL_RENDER=true
 ```
+
+Copy [.env.example](.env.example) when local configuration is needed. Real rendering remains disabled by default.
 
 Duplicate `job_id` values return `409 conflict` unless overwrite support is explicitly added later.
 

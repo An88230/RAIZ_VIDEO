@@ -103,7 +103,7 @@ Recommendation:
 
 ## 4. Required Environment Variables
 
-Proposed environment variables:
+Phase 15 introduced a centralized config loader for these environment variables:
 
 ```text
 RAIZ_ENABLE_REAL_RENDER=false
@@ -124,6 +124,8 @@ Defaults and safety behavior:
 - `RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS` must bound every network request.
 - `RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH` is for read-only health and provenance checks only.
 - `RAIZ_STORAGE_DIR` must resolve to the local jobs storage root used for artifacts.
+
+`.env.example` contains the safe defaults. Loading config must not start processes, call the network, or enable execution unless `RAIZ_ENABLE_REAL_RENDER=true`.
 
 ## 5. Sender Contract
 
@@ -233,7 +235,7 @@ Phase 14 does not implement:
 ## 10. Next Phase Proposal
 
 Phase 15:
-Implement environment config loader and `.env.example`.
+Implemented environment config loader and `.env.example`.
 
 Phase 16:
 Implement HTTP sender stub that still does not call network, but validates config and writes a planned execution artifact.

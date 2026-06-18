@@ -222,9 +222,27 @@ Completed scope:
 - Documented future status transitions and failure model.
 - Confirmed Phase 14 does not implement execution, Docker, upload, workflow integration, video generation, or vendor modification.
 
+## Phase 15: Environment Config Loader
+
+Goal: centralize runtime configuration before any real sender implementation.
+
+Completed scope:
+
+- Added `apps/orchestrator/src/envConfig.ts`.
+- Added `.env.example`.
+- `loadEnvConfig()` returns safe defaults for real render, short-video-maker mode, base URL, timeout, vendor path, and storage directory.
+- `RAIZ_ENABLE_REAL_RENDER=true` is the only value that enables guard state.
+- `RAIZ_SHORT_VIDEO_MAKER_MODE` supports only `http`.
+- Invalid mode and invalid timeout values throw clear config errors.
+- `GET /system/config` returns a safe config view.
+- The execution guard now uses centralized config.
+- The short-video-maker health endpoint reads `RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH` when no explicit server option is provided.
+- Storage defaults remain `storage/jobs`.
+- Phase 15 does not start processes, call the network, install dependencies, modify vendor files, or generate video.
+
 One clear next task:
 
-Implement environment config loader and `.env.example`.
+Implement an HTTP sender planning artifact that validates config without making network calls.
 
 ## Later Phases
 

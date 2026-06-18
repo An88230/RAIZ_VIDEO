@@ -392,6 +392,33 @@ docs/SHORT_VIDEO_MAKER_REAL_SENDER_PLAN.md
 
 No runtime behavior changes in this phase. The protected sender still returns `403` by default and `501 Not Implemented` when `RAIZ_ENABLE_REAL_RENDER=true`.
 
+## Environment Config
+
+Phase 15 centralizes runtime configuration and adds:
+
+```text
+.env.example
+```
+
+The safe config view is available at:
+
+```bash
+curl -s http://localhost:4000/system/config
+```
+
+Defaults:
+
+```text
+RAIZ_ENABLE_REAL_RENDER=false
+RAIZ_SHORT_VIDEO_MAKER_MODE=http
+RAIZ_SHORT_VIDEO_MAKER_BASE_URL=http://localhost:3123
+RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS=120000
+RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH=vendor/short-video-maker
+RAIZ_STORAGE_DIR=storage/jobs
+```
+
+`RAIZ_SHORT_VIDEO_MAKER_MODE` supports only `http` for now. `RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS` must be a positive integer. These values do not start processes, call the network, or enable real rendering by themselves.
+
 ## Inspect Job Artifacts
 
 Phase 10 adds a read-only inventory endpoint for files under `storage/jobs/{job_id}`.
