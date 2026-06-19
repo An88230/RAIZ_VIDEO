@@ -35,7 +35,15 @@
         "git_status",
         "git_log",
         "open_project_folder",
-        "open_render_output"
+        "open_render_output",
+        "show_mode_wake",
+        "get_system_status",
+        "get_git_status",
+        "get_latest_job_status",
+        "get_latest_render_status",
+        "get_review_package_status",
+        "get_publish_package_status",
+        "get_next_recommended_action"
       ]
     },
     "natural_language_command": {
@@ -107,6 +115,45 @@
         "job_id": {
           "type": "string",
           "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "question_type": {
+          "type": "string",
+          "enum": [
+            "system_status",
+            "git_status",
+            "latest_job_status",
+            "latest_render_status",
+            "review_package_status",
+            "publish_status",
+            "next_recommended_action"
+          ]
+        },
+        "include_git": {
+          "type": "boolean"
+        },
+        "include_latest_job": {
+          "type": "boolean"
+        },
+        "include_latest_render": {
+          "type": "boolean"
+        },
+        "include_review_status": {
+          "type": "boolean"
+        },
+        "include_publish_status": {
+          "type": "boolean"
+        },
+        "required_answer_when_missing": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_answer_when_publish_package_exists": {
+          "type": "string",
+          "minLength": 1
+        },
+        "must_not_publish": {
+          "type": "boolean",
+          "const": true
         }
       }
     },

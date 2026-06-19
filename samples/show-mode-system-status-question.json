@@ -1,0 +1,32 @@
+{
+  "command_id": "cmd_show_mode_system_status_001",
+  "source": "voice_input",
+  "requested_action": "get_system_status",
+  "natural_language_command": "الوضع إيه؟",
+  "project_context": {
+    "workspace": "RAIZ_VIDEO",
+    "project": "RAIZ Show Mode",
+    "language": "ar",
+    "direction": "rtl"
+  },
+  "payload": {
+    "question_type": "system_status",
+    "include_git": true,
+    "include_latest_job": true,
+    "include_latest_render": true,
+    "include_review_status": true,
+    "include_publish_status": true
+  },
+  "safety": {
+    "requires_confirmation": false,
+    "allow_arbitrary_shell": false,
+    "allowed_paths": [
+      "storage/jobs/",
+      "storage/renders/"
+    ],
+    "secrets_in_payload": false,
+    "audit_log_required": true,
+    "network_allowed": false
+  },
+  "created_at": "2026-06-20T00:00:01.000Z"
+}

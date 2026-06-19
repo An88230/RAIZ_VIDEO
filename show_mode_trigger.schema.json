@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nabil88.art/schemas/show_mode_trigger.schema.json",
+  "title": "Creative OS Show Mode Trigger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "trigger_id",
+    "trigger_type",
+    "source",
+    "detected_at",
+    "ui_state_before",
+    "ui_state_after",
+    "listen_mode",
+    "safety"
+  ],
+  "properties": {
+    "trigger_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "trigger_type": {
+      "type": "string",
+      "enum": ["double_clap", "wake_phrase", "manual_button"]
+    },
+    "source": {
+      "type": "string",
+      "enum": ["microphone", "keyboard", "button", "test_fixture"]
+    },
+    "detected_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ui_state_before": {
+      "type": "string",
+      "enum": ["idle", "show_mode", "listen_mode"]
+    },
+    "ui_state_after": {
+      "type": "string",
+      "const": "show_mode"
+    },
+    "listen_mode": {
+      "type": "boolean",
+      "const": true
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "will_execute_action",
+        "will_run_render",
+        "will_publish",
+        "will_push_git",
+        "will_execute_shell"
+      ],
+      "properties": {
+        "will_execute_action": {
+          "type": "boolean",
+          "const": false
+        },
+        "will_run_render": {
+          "type": "boolean",
+          "const": false
+        },
+        "will_publish": {
+          "type": "boolean",
+          "const": false
+        },
+        "will_push_git": {
+          "type": "boolean",
+          "const": false
+        },
+        "will_execute_shell": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    }
+  }
+}

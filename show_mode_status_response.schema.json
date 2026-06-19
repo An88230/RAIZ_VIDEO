@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nabil88.art/schemas/show_mode_status_response.schema.json",
+  "title": "Creative OS Show Mode Status Response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "response_id",
+    "question",
+    "answer",
+    "status_type",
+    "read_only",
+    "git",
+    "latest_job",
+    "latest_render",
+    "review_package",
+    "publish_package",
+    "publishing",
+    "next_recommended_action",
+    "created_at"
+  ],
+  "properties": {
+    "response_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "answer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status_type": {
+      "type": "string",
+      "enum": ["system", "publish", "render", "review", "next_action"]
+    },
+    "read_only": {
+      "type": "boolean",
+      "const": true
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status_summary", "latest_commit"],
+      "properties": {
+        "status_summary": {
+          "type": ["string", "null"]
+        },
+        "latest_commit": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "latest_job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "status"],
+      "properties": {
+        "job_id": {
+          "type": ["string", "null"]
+        },
+        "status": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "latest_render": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_path", "status"],
+      "properties": {
+        "output_path": {
+          "type": ["string", "null"]
+        },
+        "status": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "review_package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exists", "path"],
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "publish_package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exists", "path"],
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "publishing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "executed"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["not_started", "planned_only", "ready_for_review", "unknown"]
+        },
+        "executed": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "next_recommended_action": {
+      "type": ["string", "null"]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

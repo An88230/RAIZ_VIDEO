@@ -1,0 +1,16 @@
+{
+  "trigger_id": "show_mode_double_clap_001",
+  "trigger_type": "double_clap",
+  "source": "microphone",
+  "detected_at": "2026-06-20T00:00:00.000Z",
+  "ui_state_before": "idle",
+  "ui_state_after": "show_mode",
+  "listen_mode": true,
+  "safety": {
+    "will_execute_action": false,
+    "will_run_render": false,
+    "will_publish": false,
+    "will_push_git": false,
+    "will_execute_shell": false
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "command_id": "cmd_show_mode_publish_status_001",
+  "source": "voice_input",
+  "requested_action": "get_publish_package_status",
+  "natural_language_command": "حالة النشر؟",
+  "project_context": {
+    "workspace": "RAIZ_VIDEO",
+    "project": "RAIZ Show Mode",
+    "language": "ar",
+    "direction": "rtl"
+  },
+  "payload": {
+    "question_type": "publish_status",
+    "required_answer_when_missing": "النشر لم يبدأ. الموجود حاليًا خطة/حزمة مراجعة فقط.",
+    "required_answer_when_publish_package_exists": "جاهز للمراجعة قبل النشر.",
+    "must_not_publish": true
+  },
+  "safety": {
+    "requires_confirmation": false,
+    "allow_arbitrary_shell": false,
+    "allowed_paths": [
+      "storage/jobs/"
+    ],
+    "secrets_in_payload": false,
+    "audit_log_required": true,
+    "network_allowed": false
+  },
+  "created_at": "2026-06-20T00:00:02.000Z"
+}

@@ -32,7 +32,15 @@
         "git_status",
         "git_log",
         "open_project_folder",
-        "open_render_output"
+        "open_render_output",
+        "show_mode_wake",
+        "get_system_status",
+        "get_git_status",
+        "get_latest_job_status",
+        "get_latest_render_status",
+        "get_review_package_status",
+        "get_publish_package_status",
+        "get_next_recommended_action"
       ]
     },
     "status": {
@@ -87,7 +95,15 @@
         "git_status",
         "git_log",
         "open_project_folder",
-        "open_render_output"
+        "open_render_output",
+        "show_mode_wake",
+        "get_system_status",
+        "get_git_status",
+        "get_latest_job_status",
+        "get_latest_render_status",
+        "get_review_package_status",
+        "get_publish_package_status",
+        "get_next_recommended_action"
       ]
     },
     "errors": {

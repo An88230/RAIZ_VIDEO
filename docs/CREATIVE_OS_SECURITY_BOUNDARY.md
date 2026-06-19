@@ -57,6 +57,20 @@ Actions with meaningful side effects require explicit confirmation. Examples:
 
 Read-only inspection can run without confirmation.
 
+## Show Mode Boundary
+
+Show Mode wake triggers are UI-state events only. A double clap, wake phrase, or
+manual trigger may switch Creative OS into Show Mode / Listen Mode, but it must
+not run render, publish, push git, execute shell, upload, or mutate files.
+
+Show Mode status Q&A actions are read-only. They may report local RAIZ status,
+latest git state, latest job status, render output paths, review package state,
+publish package state, and the next recommended safe action.
+
+"حالة النشر" means report publishing readiness/status only. It must never
+publish. If a separate future publish action is introduced, it must be explicit,
+registered, confirmed, and outside this read-only status boundary.
+
 ## Audit Boundary
 
 Every action writes an audit log entry in the future Local Agent production path.
