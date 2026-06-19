@@ -12,8 +12,17 @@
 // Usage: node scripts/render-arabic-local.mjs [--job=path.json] [--out=dir]
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
+import { basename, dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -66,6 +75,54 @@ function probeDurationSeconds(mediaPath) {
     throw new Error(`Could not read a valid duration from ${mediaPath} (got "${out}").`);
   }
   return seconds;
+}
+
+function pickBrollClip(folder) {
+  let names;
+  try {
+    names = readdirSync(folder).filter((name) => /\.(mp4|mov|m4v|webm|mkv)$/i.test(name));
+  } catch {
+    return null;
+  }
+
+  const target = 1080 * 1920;
+  const scored = [];
+  for (const name of names) {
+    const path = resolve(folder, name);
+    let wh;
+    try {
+      wh = capture("ffprobe", [
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "csv=p=0",
+        path
+      ])
+        .trim()
+        .split("\n")[0];
+    } catch {
+      continue;
+    }
+    const [w, h] = wh.split(",").map((value) => Number.parseInt(value, 10));
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+      continue;
+    }
+    scored.push({ path, w, h, portrait: h > w, areaDist: Math.abs(w * h - target), size: statSync(path).size });
+  }
+
+  if (scored.length === 0) {
+    return null;
+  }
+
+  const portrait = scored.filter((clip) => clip.portrait);
+  const pool = portrait.length > 0 ? portrait : scored;
+  // Prefer the clip closest to 1080x1920, breaking ties by smallest file (faster decode).
+  pool.sort((a, b) => a.areaDist - b.areaDist || a.size - b.size);
+  return pool[0];
 }
 
 function chunkText(text, maxWords = 7) {
@@ -214,8 +271,37 @@ function main() {
   writeFileSync(assPath, buildAss(allCues), "utf8");
   console.log(`[captions] wrote ${allCues.length} cues -> captions.srt, captions.ass`);
 
+  // 3.5 Local b-roll background (optional). Brand-first: local folder only here.
+  let brollSrc;
+  let brollDurationSeconds;
+  let publicBrollPath;
+  if (job.assets?.broll_source === "local" && job.assets?.broll_folder) {
+    const brollFolder = resolve(repoRoot, job.assets.broll_folder);
+    if (existsSync(brollFolder)) {
+      const pick = pickBrollClip(brollFolder);
+      if (pick) {
+        const ext = extname(pick.path) || ".mp4";
+        const publicBrollDir = resolve(remotionDir, "public/broll");
+        mkdirSync(publicBrollDir, { recursive: true });
+        publicBrollPath = resolve(publicBrollDir, `${jobId}${ext}`);
+        copyFileSync(pick.path, publicBrollPath);
+        brollSrc = `broll/${jobId}${ext}`;
+        brollDurationSeconds = probeDurationSeconds(pick.path);
+        console.log(`\n[broll] background: ${basename(pick.path)} (${pick.w}x${pick.h}) -> public/${brollSrc}`);
+      }
+    } else {
+      console.log(`\n[broll] declared local folder not found: ${brollFolder} (rendering on black).`);
+    }
+  }
+
   // 4. Remotion render (visual layer, silent).
-  const props = { hook, title: job.title || "", captions: scriptCues, durationInSeconds: durationSeconds };
+  const props = {
+    hook,
+    title: job.title || "",
+    captions: scriptCues,
+    durationInSeconds: durationSeconds,
+    ...(brollSrc ? { brollSrc, brollDurationInSeconds: brollDurationSeconds } : {})
+  };
   writeFileSync(propsPath, JSON.stringify(props, null, 2), "utf8");
   run(
     "Remotion render",
@@ -223,6 +309,11 @@ function main() {
     ["remotion", "render", "src/index.ts", compositionId, rawVideo, `--props=${propsPath}`],
     { cwd: remotionDir }
   );
+
+  // The b-roll copy is only needed during the Remotion render; remove it after.
+  if (publicBrollPath && existsSync(publicBrollPath)) {
+    rmSync(publicBrollPath, { force: true });
+  }
 
   // 5. Mux VO into the silent render.
   run("FFmpeg mux audio", "ffmpeg", [

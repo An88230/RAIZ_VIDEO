@@ -23,7 +23,9 @@ export const RaizRoot: React.FC = () => {
           hook: "إنت مش تعبان… إنت مُفرطن.",
           title: "",
           captions: [],
-          durationInSeconds: DEFAULT_DURATION_SECONDS
+          durationInSeconds: DEFAULT_DURATION_SECONDS,
+          brollSrc: "",
+          brollDurationInSeconds: 0
         } satisfies RaizDarkHook01Props
       }
       calculateMetadata={({ props }) => {

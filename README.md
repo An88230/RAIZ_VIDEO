@@ -113,10 +113,24 @@ Then point the job at them:
 "assets": { "broll_source": "local", "broll_folder": "storage/assets/broll" }
 ```
 
-Prefer vertical `9:16` `.mp4` clips. Local b-roll is the brand-first source; Pexels
-is an optional fallback only. Background footage is **not consumed by the render
-yet** — that arrives in the media-assets phase; this just establishes where your
-clips live so they are ready.
+Prefer vertical `9:16` `.mp4` clips. The render automatically picks the clip
+closest to `1080x1920` from `broll_folder` and uses it as a **darkened background
+layer** behind the hook (looped to the voice-over length). With no clips, it falls
+back to a solid dark background. Local b-roll is the brand-first source.
+
+#### Optional: fetch b-roll from Pexels
+
+Pexels is an optional enrichment (not the brand default). It only runs when a key
+is present:
+
+```bash
+# put PEXELS_API_KEY=... in .env (gitignored), then:
+npm run raiz:fetch-broll -- --query="dark moody clouds" --count=3
+```
+
+Clips download to `storage/assets/broll/pexels/` (portrait only, cached, never
+overwrites). To use them in a render, point the job's `broll_folder` at that
+subfolder. Without a key the fetch warns and exits without failing.
 
 ## Phase 21 Commands
 

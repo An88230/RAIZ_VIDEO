@@ -7,8 +7,13 @@ export const ARABIC_FONT_FAMILY = "IBM Plex Sans Arabic RAIZ";
 let started = false;
 
 /**
- * Loads the bundled Arabic font files into the Remotion render browser. Safe to
- * call repeatedly: it only registers a single delayRender handle on first call.
+ * Loads the bundled Arabic font files into the Remotion render browser.
+ *
+ * Remotion periodically reloads the rendering tab during long/video renders,
+ * which re-evaluates this module and re-runs font loading. To stay robust we
+ * cap how long the font load may block a frame: after a short safety window we
+ * continue rendering regardless, falling back to the system Arabic font. This
+ * prevents "delayRender() was not cleared" timeouts (e.g. with b-roll video).
  */
 export function ensureArabicFonts(): void {
   if (started || typeof document === "undefined" || typeof FontFace === "undefined") {
@@ -16,7 +21,7 @@ export function ensureArabicFonts(): void {
   }
 
   started = true;
-  const handle = delayRender("Loading Arabic fonts");
+  const handle = delayRender("Loading Arabic fonts", { timeoutInMilliseconds: 60000 });
 
   const regular = new FontFace(
     ARABIC_FONT_FAMILY,
@@ -29,13 +34,17 @@ export function ensureArabicFonts(): void {
     { weight: "700" }
   );
 
-  Promise.all([regular.load(), bold.load()])
+  const load = Promise.all([regular.load(), bold.load()])
     .then((fonts) => {
       fonts.forEach((font) => document.fonts.add(font));
-      continueRender(handle);
     })
     .catch(() => {
-      // Never block the render on a font failure; fall back to system Arabic.
-      continueRender(handle);
+      // Fall back to the system Arabic font on any failure.
     });
+
+  const safetyWindow = new Promise<void>((resolveSafety) => {
+    setTimeout(resolveSafety, 8000);
+  });
+
+  Promise.race([load, safetyWindow]).finally(() => continueRender(handle));
 }

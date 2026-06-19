@@ -1,5 +1,13 @@
 import React from "react";
-import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
+import {
+  AbsoluteFill,
+  interpolate,
+  Loop,
+  OffthreadVideo,
+  staticFile,
+  useCurrentFrame,
+  useVideoConfig
+} from "remotion";
 
 import { ArabicText } from "../components/ArabicText";
 
@@ -14,9 +22,23 @@ export interface RaizDarkHook01Props {
   title?: string;
   captions: CaptionCue[];
   durationInSeconds?: number;
+  /** Optional background b-roll, relative to the Remotion public dir. */
+  brollSrc?: string;
+  brollDurationInSeconds?: number;
 }
 
-export const RaizDarkHook01: React.FC<RaizDarkHook01Props> = ({ hook, captions }) => {
+const fillVideoStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover"
+};
+
+export const RaizDarkHook01: React.FC<RaizDarkHook01Props> = ({
+  hook,
+  captions,
+  brollSrc,
+  brollDurationInSeconds
+}) => {
   const frame = useCurrentFrame();
   const { fps, width } = useVideoConfig();
   const t = frame / fps;
@@ -33,8 +55,29 @@ export const RaizDarkHook01: React.FC<RaizDarkHook01Props> = ({ hook, captions }
 
   const activeCaption = captions.find((cue) => t >= cue.fromSec && t < cue.toSec);
 
+  const hasBroll = Boolean(brollSrc);
+  const loopFrames =
+    brollDurationInSeconds && brollDurationInSeconds > 0
+      ? Math.max(1, Math.round(brollDurationInSeconds * fps))
+      : 0;
+
   return (
     <AbsoluteFill style={{ backgroundColor: "#0a0a0a" }}>
+      {hasBroll ? (
+        <AbsoluteFill>
+          {loopFrames > 0 ? (
+            <Loop durationInFrames={loopFrames}>
+              <OffthreadVideo src={staticFile(brollSrc as string)} muted style={fillVideoStyle} />
+            </Loop>
+          ) : (
+            <OffthreadVideo src={staticFile(brollSrc as string)} muted style={fillVideoStyle} />
+          )}
+        </AbsoluteFill>
+      ) : null}
+
+      {/* Darkening overlay keeps the white Arabic hook readable over footage. */}
+      {hasBroll ? <AbsoluteFill style={{ backgroundColor: "rgba(0,0,0,0.58)" }} /> : null}
+
       <AbsoluteFill
         style={{
           background:
@@ -59,7 +102,7 @@ export const RaizDarkHook01: React.FC<RaizDarkHook01Props> = ({ hook, captions }
               lineHeight: 1.25,
               color: "#ffffff",
               textAlign: "center",
-              textShadow: "0 4px 30px rgba(0,0,0,0.65)"
+              textShadow: "0 4px 30px rgba(0,0,0,0.8)"
             }}
           >
             {hook}
@@ -75,11 +118,11 @@ export const RaizDarkHook01: React.FC<RaizDarkHook01Props> = ({ hook, captions }
               fontSize: 54,
               lineHeight: 1.3,
               color: "#ffffff",
-              backgroundColor: "rgba(0,0,0,0.45)",
+              backgroundColor: "rgba(0,0,0,0.5)",
               padding: "16px 26px",
               borderRadius: 18,
               display: "inline-block",
-              textShadow: "0 2px 10px rgba(0,0,0,0.85)"
+              textShadow: "0 2px 10px rgba(0,0,0,0.9)"
             }}
           >
             {activeCaption.text}

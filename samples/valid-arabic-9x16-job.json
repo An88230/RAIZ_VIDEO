@@ -22,7 +22,7 @@
   },
   "assets": {
     "broll_source": "local",
-    "broll_folder": "/storage/assets/smoke",
+    "broll_folder": "storage/assets/broll",
     "music": "/storage/audio/pulse-low.mp3"
   },
   "captions": {

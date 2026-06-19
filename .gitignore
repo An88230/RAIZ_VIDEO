@@ -10,3 +10,4 @@ vendor/
 storage/*
 !storage/.gitkeep
 storage/jobs/
+apps/render-remotion/public/broll/
