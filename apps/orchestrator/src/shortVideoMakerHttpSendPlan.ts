@@ -42,7 +42,8 @@ export interface ShortVideoMakerHttpSendPlan {
   metadata: {
     source: "raiz_video_factory";
     created_at: string;
-    endpoint_unconfirmed: true;
+    endpoint_unconfirmed: false;
+    render_path: string;
   };
 }
 
@@ -102,7 +103,7 @@ export async function createShortVideoMakerHttpSendPlan(
     execution: "planned_only",
     will_send_network_request: false,
     method: "POST",
-    url: `${config.shortVideoMakerBaseUrl.replace(/\/+$/, "")}/render`,
+    url: `${config.shortVideoMakerBaseUrl.replace(/\/+$/, "")}${config.shortVideoMakerRenderPath}`,
     timeout_ms: config.shortVideoMakerTimeoutMs,
     headers: {
       "content-type": "application/json"
@@ -124,7 +125,8 @@ export async function createShortVideoMakerHttpSendPlan(
     metadata: {
       source: "raiz_video_factory",
       created_at: new Date().toISOString(),
-      endpoint_unconfirmed: true
+      endpoint_unconfirmed: false,
+      render_path: config.shortVideoMakerRenderPath
     }
   };
 

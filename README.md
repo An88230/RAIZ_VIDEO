@@ -72,6 +72,8 @@ The one-command local safe pipeline is documented in [RUN_LOCAL_PIPELINE.md](doc
 
 To re-run the sample job intentionally, use `RAIZ_RESET_JOB=true RAIZ_API_URL=http://127.0.0.1:4000 npm run raiz:local-pipeline`. Reset is off by default.
 
+The short-video-maker runtime connection contract is documented in [SHORT_VIDEO_MAKER_CONNECTION.md](docs/SHORT_VIDEO_MAKER_CONNECTION.md). Use `./scripts/check-short-video-maker-runtime.sh` for a health-only check of a separately running upstream service.
+
 Current endpoints:
 
 - `GET /adapters/short-video-maker/health`

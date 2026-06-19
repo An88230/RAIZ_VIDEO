@@ -4,6 +4,7 @@ export interface EnvConfig {
   realRenderEnabled: boolean;
   shortVideoMakerMode: ShortVideoMakerMode;
   shortVideoMakerBaseUrl: string;
+  shortVideoMakerRenderPath: string;
   shortVideoMakerTimeoutMs: number;
   shortVideoMakerVendorPath: string;
   storageDir: string;
@@ -20,6 +21,7 @@ const defaults = {
   enableRealRender: "false",
   shortVideoMakerMode: "http",
   shortVideoMakerBaseUrl: "http://localhost:3123",
+  shortVideoMakerRenderPath: "/api/short-video",
   shortVideoMakerTimeoutMs: "120000",
   shortVideoMakerVendorPath: "vendor/short-video-maker",
   storageDir: "storage/jobs"
@@ -37,10 +39,18 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
     throw new EnvConfigError("RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS must be a positive integer.");
   }
 
+  const shortVideoMakerRenderPath =
+    env.RAIZ_SHORT_VIDEO_MAKER_RENDER_PATH ?? defaults.shortVideoMakerRenderPath;
+
+  if (!shortVideoMakerRenderPath.startsWith("/") || shortVideoMakerRenderPath.trim().length === 1) {
+    throw new EnvConfigError("RAIZ_SHORT_VIDEO_MAKER_RENDER_PATH must be an absolute path like /api/short-video.");
+  }
+
   return {
     realRenderEnabled: env.RAIZ_ENABLE_REAL_RENDER === "true",
     shortVideoMakerMode,
     shortVideoMakerBaseUrl: env.RAIZ_SHORT_VIDEO_MAKER_BASE_URL ?? defaults.shortVideoMakerBaseUrl,
+    shortVideoMakerRenderPath,
     shortVideoMakerTimeoutMs: Number(timeoutRaw),
     shortVideoMakerVendorPath: env.RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH ?? defaults.shortVideoMakerVendorPath,
     storageDir: env.RAIZ_STORAGE_DIR ?? defaults.storageDir

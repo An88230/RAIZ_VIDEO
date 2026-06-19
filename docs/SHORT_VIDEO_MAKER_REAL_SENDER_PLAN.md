@@ -126,6 +126,7 @@ Phase 15 introduced a centralized config loader for these environment variables:
 RAIZ_ENABLE_REAL_RENDER=false
 RAIZ_SHORT_VIDEO_MAKER_MODE=http
 RAIZ_SHORT_VIDEO_MAKER_BASE_URL=http://localhost:3123
+RAIZ_SHORT_VIDEO_MAKER_RENDER_PATH=/api/short-video
 RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS=120000
 RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH=vendor/short-video-maker
 RAIZ_STORAGE_DIR=storage/jobs
@@ -138,6 +139,7 @@ Defaults and safety behavior:
 - `RAIZ_SHORT_VIDEO_MAKER_MODE=http` selects Mode A.
 - Any mode other than `http` should be rejected until explicitly implemented.
 - `RAIZ_SHORT_VIDEO_MAKER_BASE_URL` must point to an already-running upstream service.
+- `RAIZ_SHORT_VIDEO_MAKER_RENDER_PATH` defaults to the discovered upstream submit endpoint, `/api/short-video`.
 - `RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS` must bound every network request.
 - `RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH` is for read-only health and provenance checks only.
 - `RAIZ_STORAGE_DIR` must resolve to the local jobs storage root used for artifacts.

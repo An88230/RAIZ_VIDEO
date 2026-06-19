@@ -253,8 +253,8 @@ Completed scope:
 - HTTP send plan creation requires `metadata.dry_run_request_created: true`.
 - HTTP send plan creation requires `metadata.readiness_status: passed`.
 - HTTP send plan creation writes `storage/jobs/{job_id}/short-video-maker-http-send.plan.json`.
-- The plan records method, conservative `/render` URL, timeout, headers, dry-run request path, expected response artifact path, execution guard snapshot, and disabled safety flags.
-- The plan marks `metadata.endpoint_unconfirmed: true` because the final upstream endpoint is not confirmed yet.
+- The plan records method, configurable short-video-maker render URL, timeout, headers, dry-run request path, expected response artifact path, execution guard snapshot, and disabled safety flags.
+- The plan records the discovered upstream render path in metadata. The default is `/api/short-video`, and it can be overridden with `RAIZ_SHORT_VIDEO_MAKER_RENDER_PATH`.
 - Status remains unchanged.
 - Status metadata records the plan path and `http_send_plan_created: true`.
 - The event log receives `job.http_send_plan_created`.

@@ -16,6 +16,7 @@ const managedEnvKeys = [
   "RAIZ_ENABLE_REAL_RENDER",
   "RAIZ_SHORT_VIDEO_MAKER_MODE",
   "RAIZ_SHORT_VIDEO_MAKER_BASE_URL",
+  "RAIZ_SHORT_VIDEO_MAKER_RENDER_PATH",
   "RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS",
   "RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH",
   "RAIZ_STORAGE_DIR"
@@ -35,7 +36,7 @@ const realHttpClient: HttpClient = {
     realHttpClientCalls += 1;
 
     if (
-      url !== "http://localhost:3123/render" ||
+      url !== "http://localhost:3123/api/short-video" ||
       !body ||
       options?.timeoutMs !== 120000 ||
       options.headers?.["content-type"] !== "application/json"
@@ -77,6 +78,7 @@ if (
   defaultEnvConfig.realRenderEnabled !== false ||
   defaultEnvConfig.shortVideoMakerMode !== "http" ||
   defaultEnvConfig.shortVideoMakerBaseUrl !== "http://localhost:3123" ||
+  defaultEnvConfig.shortVideoMakerRenderPath !== "/api/short-video" ||
   defaultEnvConfig.shortVideoMakerTimeoutMs !== 120000 ||
   defaultEnvConfig.shortVideoMakerVendorPath !== "vendor/short-video-maker" ||
   defaultEnvConfig.storageDir !== "storage/jobs"
@@ -165,6 +167,23 @@ try {
 
 if (!invalidTimeoutRejected) {
   throw new Error("Expected invalid short-video-maker timeout to throw EnvConfigError.");
+}
+
+let invalidRenderPathThrew = false;
+
+try {
+  loadEnvConfig({
+    ...process.env,
+    RAIZ_SHORT_VIDEO_MAKER_RENDER_PATH: "api/short-video"
+  });
+} catch (error) {
+  if (error instanceof EnvConfigError) {
+    invalidRenderPathThrew = true;
+  }
+}
+
+if (!invalidRenderPathThrew) {
+  throw new Error("Expected invalid short-video-maker render path to throw EnvConfigError.");
 }
 
 interface ArtifactInventoryBody {
@@ -480,6 +499,7 @@ const configBody = JSON.parse(configResponse.body) as {
   realRenderEnabled?: boolean;
   shortVideoMakerMode?: string;
   shortVideoMakerBaseUrl?: string;
+  shortVideoMakerRenderPath?: string;
   shortVideoMakerTimeoutMs?: number;
   shortVideoMakerVendorPath?: string;
   storageDir?: string;
@@ -491,6 +511,7 @@ if (
   configBody.realRenderEnabled !== false ||
   configBody.shortVideoMakerMode !== "http" ||
   configBody.shortVideoMakerBaseUrl !== "http://localhost:3123" ||
+  configBody.shortVideoMakerRenderPath !== "/api/short-video" ||
   configBody.shortVideoMakerTimeoutMs !== 120000 ||
   configBody.shortVideoMakerVendorPath !== "vendor/short-video-maker" ||
   configBody.storageDir !== "storage/jobs" ||
@@ -1211,7 +1232,7 @@ const httpSendPlanPath = resolve(prepareJobDir, "short-video-maker-http-send.pla
 if (
   httpSendPlan.execution !== "planned_only" ||
   httpSendPlan.method !== "POST" ||
-  httpSendPlan.url !== "http://localhost:3123/render" ||
+  httpSendPlan.url !== "http://localhost:3123/api/short-video" ||
   httpSendPlan.timeout_ms !== 120000 ||
   httpSendPlan.headers?.["content-type"] !== "application/json" ||
   httpSendPlan.body_source_path !== dryRunRequestPath ||
@@ -1408,7 +1429,7 @@ const injectedMockClient: HttpClient = {
     injectedMockClientCalls += 1;
 
     if (
-      url !== "http://localhost:3123/render" ||
+      url !== "http://localhost:3123/api/short-video" ||
       !body ||
       options?.timeoutMs !== 120000 ||
       options.headers?.["content-type"] !== "application/json"

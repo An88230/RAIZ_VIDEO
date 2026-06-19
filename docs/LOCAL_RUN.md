@@ -470,6 +470,7 @@ Defaults:
 RAIZ_ENABLE_REAL_RENDER=false
 RAIZ_SHORT_VIDEO_MAKER_MODE=http
 RAIZ_SHORT_VIDEO_MAKER_BASE_URL=http://localhost:3123
+RAIZ_SHORT_VIDEO_MAKER_RENDER_PATH=/api/short-video
 RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS=120000
 RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH=vendor/short-video-maker
 RAIZ_STORAGE_DIR=storage/jobs
@@ -499,18 +500,19 @@ The plan records:
 
 ```text
 method: POST
-url: http://localhost:3123/render
+url: http://localhost:3123/api/short-video
 timeout_ms: 120000
 headers: content-type application/json
 body_source_path: storage/jobs/{job_id}/short-video-maker-request.dry-run.json
 expected_response_artifact: storage/jobs/{job_id}/short-video-maker-response.json
 safety.will_make_network_request: false
-metadata.endpoint_unconfirmed: true
+metadata.endpoint_unconfirmed: false
+metadata.render_path: /api/short-video
 ```
 
 The job remains `preparing`. `status.json` receives `metadata.short_video_maker_http_send_plan_path` and `metadata.http_send_plan_created`. `events.ndjson` receives `job.http_send_plan_created`.
 
-Calling this before the dry-run request exists returns `409 conflict`. Unknown jobs return `404`. Invalid `RAIZ_SHORT_VIDEO_MAKER_MODE` or timeout config returns a clear config error before any network call could happen.
+Calling this before the dry-run request exists returns `409 conflict`. Unknown jobs return `404`. Invalid `RAIZ_SHORT_VIDEO_MAKER_MODE`, render path, or timeout config returns a clear config error before any network call could happen.
 
 ## Run Mocked HTTP Sender
 
