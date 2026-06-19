@@ -11,7 +11,8 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "dev:orchestrator": "npm --workspace @raiz/orchestrator run dev"
+    "dev:orchestrator": "npm --workspace @raiz/orchestrator run dev",
+    "raiz:local-pipeline": "bash scripts/run-local-pipeline.sh"
   },
   "engines": {
     "node": ">=20"
