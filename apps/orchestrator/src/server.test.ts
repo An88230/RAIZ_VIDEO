@@ -3448,6 +3448,178 @@ if (unknownPatchResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job transition to return 404, got ${unknownPatchResponse.statusCode}.`);
 }
 
+// --- M1: /health and /engines ----------------------------------------------
+const healthResponse = await server.inject({ method: "GET", url: "/health" });
+
+if (healthResponse.statusCode !== 200) {
+  throw new Error(`Expected /health to return 200, got ${healthResponse.statusCode}.`);
+}
+
+const healthBody = JSON.parse(healthResponse.body) as { status?: string; service?: string };
+
+if (healthBody.status !== "ok" || healthBody.service !== "raiz-orchestrator") {
+  throw new Error("Expected /health to report ok status for raiz-orchestrator.");
+}
+
+const enginesResponse = await server.inject({ method: "GET", url: "/engines" });
+
+if (enginesResponse.statusCode !== 200) {
+  throw new Error(`Expected /engines to return 200, got ${enginesResponse.statusCode}.`);
+}
+
+const enginesBody = JSON.parse(enginesResponse.body) as {
+  default_engine?: string;
+  engines?: Array<{ id?: string; status?: string }>;
+};
+
+if (
+  enginesBody.default_engine !== "short_video_maker" ||
+  !enginesBody.engines?.some((engine) => engine.id === "short_video_maker" && engine.status === "available")
+) {
+  throw new Error("Expected /engines to list short_video_maker as the available default engine.");
+}
+
+// --- H1: voice preflight is conditional on voice.type ----------------------
+const prepareAndPreflight = async (jobId: string, voice: unknown): Promise<string> => {
+  const job = {
+    ...sampleJob,
+    job_id: jobId,
+    voice,
+    output: { ...(sampleJob.output as Record<string, unknown>), filename: `${jobId}.mp4` }
+  };
+  const renderResponse = await server.inject({ method: "POST", url: "/jobs/render", payload: job });
+
+  if (renderResponse.statusCode !== 202) {
+    throw new Error(`Expected ${jobId} to queue, got ${renderResponse.statusCode}.`);
+  }
+
+  const prepareResponse = await server.inject({ method: "POST", url: `/jobs/${jobId}/prepare` });
+
+  if (prepareResponse.statusCode !== 200) {
+    throw new Error(`Expected ${jobId} to prepare, got ${prepareResponse.statusCode}.`);
+  }
+
+  const preflightResponse = await server.inject({ method: "POST", url: `/jobs/${jobId}/preflight` });
+
+  if (preflightResponse.statusCode !== 200) {
+    throw new Error(`Expected ${jobId} preflight to return 200, got ${preflightResponse.statusCode}.`);
+  }
+
+  return preflightResponse.body;
+};
+
+const externalVoiceReport = JSON.parse(
+  await prepareAndPreflight("voice-external-file-001", {
+    type: "external_file",
+    file_path: resolve(storageRoot, "missing-external-voice.wav")
+  })
+) as { status?: string; checks?: Array<{ name?: string; severity?: string; passed?: boolean }> };
+
+if (externalVoiceReport.status !== "passed") {
+  throw new Error("Expected external_file voice without provider/voice_name to pass preflight.");
+}
+
+if (externalVoiceReport.checks?.some((check) => check.name === "voice_provider_exists")) {
+  throw new Error("Expected external_file voice to skip the TTS provider requirement.");
+}
+
+if (!externalVoiceReport.checks?.some((check) => check.name === "voice_file_path_declared" && check.passed)) {
+  throw new Error("Expected external_file voice to require a declared file path.");
+}
+
+const noneVoiceReport = JSON.parse(await prepareAndPreflight("voice-none-001", { type: "none" })) as {
+  status?: string;
+};
+
+if (noneVoiceReport.status !== "passed") {
+  throw new Error("Expected voice type none to pass preflight without narration fields.");
+}
+
+const ttsMissingReport = JSON.parse(await prepareAndPreflight("voice-tts-missing-001", { type: "edge_tts" })) as {
+  status?: string;
+};
+
+if (ttsMissingReport.status !== "failed") {
+  throw new Error("Expected edge_tts without provider/voice_name to fail preflight.");
+}
+
+// --- C1: upstream {scenes, config} request endpoint ------------------------
+const upstreamUnknownResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/does-not-exist/upstream-request/short-video-maker"
+});
+
+if (upstreamUnknownResponse.statusCode !== 404) {
+  throw new Error(`Expected upstream request for unknown job to return 404, got ${upstreamUnknownResponse.statusCode}.`);
+}
+
+const queuedUpstreamJob = {
+  ...sampleJob,
+  job_id: "voice-upstream-queued-001",
+  output: { ...(sampleJob.output as Record<string, unknown>), filename: "voice-upstream-queued-001.mp4" }
+};
+const queuedUpstreamRender = await server.inject({ method: "POST", url: "/jobs/render", payload: queuedUpstreamJob });
+
+if (queuedUpstreamRender.statusCode !== 202) {
+  throw new Error(`Expected queued upstream job to queue, got ${queuedUpstreamRender.statusCode}.`);
+}
+
+const queuedUpstreamResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/voice-upstream-queued-001/upstream-request/short-video-maker"
+});
+
+if (queuedUpstreamResponse.statusCode !== 409) {
+  throw new Error(`Expected upstream request for queued job to return 409, got ${queuedUpstreamResponse.statusCode}.`);
+}
+
+const upstreamPayloadResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/voice-external-file-001/adapter-payload/short-video-maker"
+});
+
+if (upstreamPayloadResponse.statusCode !== 200) {
+  throw new Error(`Expected adapter payload to return 200, got ${upstreamPayloadResponse.statusCode}.`);
+}
+
+const upstreamResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/voice-external-file-001/upstream-request/short-video-maker"
+});
+
+if (upstreamResponse.statusCode !== 200) {
+  throw new Error(`Expected upstream request to return 200, got ${upstreamResponse.statusCode}.`);
+}
+
+const upstreamBody = JSON.parse(upstreamResponse.body) as {
+  request?: {
+    scenes?: Array<{ text?: string; searchTerms?: string[] }>;
+    config?: { orientation?: string; voice?: string };
+  };
+  limitations?: string[];
+  scene_count?: number;
+};
+
+if (
+  !upstreamBody.request?.scenes?.length ||
+  upstreamBody.request.scenes.some((scene) => !scene.text?.trim() || !scene.searchTerms?.length) ||
+  upstreamBody.request.config?.orientation !== "portrait" ||
+  !upstreamBody.limitations?.some((limitation) => limitation.includes("Kokoro"))
+) {
+  throw new Error("Expected upstream request endpoint to return a valid {scenes, config} body with limitations.");
+}
+
+const upstreamArtifactPath = resolve(
+  storageRoot,
+  "jobs",
+  "voice-external-file-001",
+  "short-video-maker-upstream-request.json"
+);
+
+if (!existsSync(upstreamArtifactPath)) {
+  throw new Error("Expected upstream request endpoint to persist short-video-maker-upstream-request.json.");
+}
+
 const invalidStorageRoot = mkdtempSync(resolve(tmpdir(), "raiz-invalid-test-"));
 const invalidServer = createServer({ storageRoot: invalidStorageRoot });
 const invalidRenderResponse = await invalidServer.inject({

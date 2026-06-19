@@ -76,6 +76,8 @@ The short-video-maker runtime connection contract is documented in [SHORT_VIDEO_
 
 Current endpoints:
 
+- `GET /health`
+- `GET /engines`
 - `GET /adapters/short-video-maker/health`
 - `POST /jobs/validate`
 - `POST /jobs/render`
@@ -84,6 +86,7 @@ Current endpoints:
 - `POST /jobs/:id/mock-render`
 - `POST /jobs/:id/adapter-health`
 - `POST /jobs/:id/adapter-payload/short-video-maker`
+- `POST /jobs/:id/upstream-request/short-video-maker`
 - `POST /jobs/:id/readiness-review`
 - `POST /jobs/:id/adapter-dry-run/short-video-maker`
 - `POST /jobs/:id/http-send-plan/short-video-maker`
@@ -116,11 +119,17 @@ Preflight also checks declared local voice and asset paths. Missing local voice 
 
 `POST /jobs/:id/mock-render` requires `preflight_status: passed`, moves the job through `rendering -> rendered`, and writes a text artifact at `storage/jobs/{job_id}/output/{job_id}.mock-render.txt`. It does not call a render engine and does not generate video.
 
+`GET /health` returns a lightweight liveness response for the orchestrator itself, including the current real render flag. It does not touch storage, start processes, or call the network.
+
+`GET /engines` lists the render adapters registered in RAIZ and the default engine. It does not call any engine.
+
 `GET /adapters/short-video-maker/health` inspects `vendor/short-video-maker` for expected reference files. It does not install dependencies, start Docker, call short-video-maker, or render anything.
 
 `POST /jobs/:id/adapter-health` writes `storage/jobs/{job_id}/adapter-health.short-video-maker.json` and appends `job.adapter_health_checked` without changing job status.
 
 `POST /jobs/:id/adapter-payload/short-video-maker` requires `status: preparing` and `preflight_status: passed`, writes `storage/jobs/{job_id}/short-video-maker-payload.json`, appends `job.adapter_payload_created`, and leaves job status unchanged.
+
+`POST /jobs/:id/upstream-request/short-video-maker` requires `status: preparing`, `preflight_status: passed`, and an existing adapter payload. It maps the RAIZ payload into the **actual upstream short-video-maker contract** (`{ scenes, config }` for `POST /api/short-video`), writes `storage/jobs/{job_id}/short-video-maker-upstream-request.json`, and appends `job.upstream_request_created`. The artifact also records `limitations` — the semantic gaps of this engine (Kokoro narrates English only, footage is sourced from Pexels via per-scene `searchTerms`, captions are always rendered). It does not send the request, call short-video-maker, change job status, or generate video. The guarded real sender does not yet send this body; wiring it is the next step.
 
 `POST /jobs/:id/readiness-review` requires the job to remain `preparing`, checks the required local artifacts, verifies preflight, adapter health, short-video-maker payload composition, and output directory readiness, then writes `storage/jobs/{job_id}/readiness-review.json`. It updates readiness metadata and appends either `job.readiness_passed` or `job.readiness_failed`, but it does not call short-video-maker and does not generate video.
 

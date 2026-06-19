@@ -88,6 +88,11 @@ import {
   RealRenderExecutionDisabledError,
   sendShortVideoMakerWithRealHttp
 } from "./shortVideoMakerRealHttpSender.js";
+import {
+  createShortVideoMakerUpstreamRequest,
+  JobUpstreamRequestArtifactError,
+  JobUpstreamRequestStateError
+} from "./shortVideoMakerUpstreamRequest.js";
 import { InvalidStatusTransitionError, isLocalJobStatus } from "./statusTransitions.js";
 
 export interface CreateServerOptions {
@@ -153,6 +158,26 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
 
   server.get("/system/config", async () => {
     return getSafeConfigView();
+  });
+
+  server.get("/health", async () => {
+    return {
+      status: "ok",
+      service: "raiz-orchestrator",
+      real_render_enabled: getExecutionGuard().real_render_enabled,
+      time: new Date().toISOString()
+    };
+  });
+
+  server.get("/engines", async () => {
+    return {
+      default_engine: renderAdapters[0]?.id ?? null,
+      engines: renderAdapters.map((adapter) => ({
+        id: adapter.id,
+        status: "available",
+        supports_health_check: typeof adapter.checkHealth === "function"
+      }))
+    };
   });
 
   server.post("/jobs/validate", async (request, reply) => {
@@ -381,6 +406,34 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
       throw error;
     }
   });
+
+  server.post<{ Params: { id: string } }>(
+    "/jobs/:id/upstream-request/short-video-maker",
+    async (request, reply) => {
+      try {
+        return await createShortVideoMakerUpstreamRequest(request.params.id, {
+          storageRoot: options.storageRoot
+        });
+      } catch (error) {
+        if (error instanceof JobNotFoundError) {
+          return reply.code(404).send({
+            status: "not_found",
+            job_id: request.params.id
+          });
+        }
+
+        if (error instanceof JobUpstreamRequestStateError || error instanceof JobUpstreamRequestArtifactError) {
+          return reply.code(409).send({
+            status: "conflict",
+            job_id: request.params.id,
+            error: error.message
+          });
+        }
+
+        throw error;
+      }
+    }
+  );
 
   server.post<{ Params: { id: string } }>("/jobs/:id/readiness-review", async (request, reply) => {
     try {

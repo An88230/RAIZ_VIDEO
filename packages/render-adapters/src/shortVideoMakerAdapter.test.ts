@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { validateRaizJob } from "@raiz/job-schema";
 
 import { mapToShortVideoMakerPayload } from "./shortVideoMakerPayloadMapper.js";
+import { mapToShortVideoMakerUpstreamRequest } from "./shortVideoMakerUpstreamMapper.js";
 import { shortVideoMakerAdapter } from "./shortVideoMakerAdapter.js";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -101,6 +102,51 @@ if (
   payload.output.filename !== validation.job.output.filename
 ) {
   throw new Error("Expected short-video-maker payload mapper to preserve RAIZ render contract fields.");
+}
+
+const upstream = mapToShortVideoMakerUpstreamRequest(payload, { captionPosition: "center" });
+
+if (upstream.request.scenes.length < 1) {
+  throw new Error("Expected upstream mapper to produce at least one scene.");
+}
+
+if (
+  upstream.request.scenes.some(
+    (scene) => !scene.text.trim() || !Array.isArray(scene.searchTerms) || scene.searchTerms.length === 0
+  )
+) {
+  throw new Error("Expected every upstream scene to carry non-empty text and search terms.");
+}
+
+if (
+  upstream.request.config.orientation !== "portrait" ||
+  upstream.request.config.captionPosition !== "center" ||
+  upstream.request.config.voice !== "af_heart" ||
+  upstream.search_terms_source !== "default"
+) {
+  throw new Error("Expected upstream config to default to portrait, Kokoro fallback voice, and placeholder terms.");
+}
+
+if (
+  !upstream.limitations.some((limitation) => limitation.includes("Kokoro")) ||
+  !upstream.limitations.some((limitation) => limitation.includes("Pexels"))
+) {
+  throw new Error("Expected upstream mapper to flag the Kokoro English-only and Pexels footage limitations.");
+}
+
+const upstreamOverrides = mapToShortVideoMakerUpstreamRequest(payload, {
+  defaultSearchTerms: ["city", "night"],
+  voiceId: "bm_lewis",
+  maxScenes: 2
+});
+
+if (
+  upstreamOverrides.request.config.voice !== "bm_lewis" ||
+  upstreamOverrides.search_terms_source !== "job" ||
+  upstreamOverrides.request.scenes.length > 2 ||
+  !upstreamOverrides.request.scenes.every((scene) => scene.searchTerms.includes("city"))
+) {
+  throw new Error("Expected upstream mapper to honor voice, search term, and max-scene overrides.");
 }
 
 rmSync(missingRoot, { force: true, recursive: true });

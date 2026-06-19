@@ -122,8 +122,7 @@ async function buildChecks(job: RaizJob, renderPlan: RenderPlan, outputDirectory
     errorCheck("arabic_language", job.language === "ar" && renderPlan.language === "ar", "Language is Arabic."),
     errorCheck("arabic_direction", job.direction === "rtl" && renderPlan.direction === "rtl", "Direction is RTL."),
     errorCheck("template_id_exists", Boolean(renderPlan.template_id?.trim()), "Template id exists."),
-    errorCheck("voice_provider_exists", Boolean(renderPlan.voice.provider?.trim()), "Voice provider exists."),
-    errorCheck("voice_name_exists", Boolean(renderPlan.voice.voice_name?.trim()), "Voice name exists."),
+    ...buildVoiceChecks(job, renderPlan),
     errorCheck("captions_config_exists", Boolean(renderPlan.captions), "Captions config exists."),
     errorCheck("output_local_path_exists", Boolean(renderPlan.output.local_path?.trim()), "Output local path exists."),
     errorCheck("output_directory_exists", outputDirectoryExists, "Output directory exists."),
@@ -132,6 +131,34 @@ async function buildChecks(job: RaizJob, renderPlan: RenderPlan, outputDirectory
   const localPathChecks = await runLocalPathWarningChecks(job, renderPlan);
 
   return [...baseChecks, ...localPathChecks];
+}
+
+function buildVoiceChecks(job: RaizJob, renderPlan: RenderPlan): PreflightCheck[] {
+  const voiceType = job.voice.type;
+
+  // No narration requested: nothing is required for the render to proceed.
+  if (voiceType === "none") {
+    return [warningCheck("voice_none", true, "Voice type is none; no narration will be generated.")];
+  }
+
+  // External recorded voice-over: a declared file path is required. Its actual
+  // existence is a warning-only check handled by runLocalPathWarningChecks, so a
+  // missing file does not fail preflight.
+  if (voiceType === "external_file") {
+    return [
+      errorCheck(
+        "voice_file_path_declared",
+        Boolean(job.voice.file_path?.trim()),
+        "External voice file path is declared."
+      )
+    ];
+  }
+
+  // TTS providers (edge_tts, elevenlabs, azure) need a provider and a voice name.
+  return [
+    errorCheck("voice_provider_exists", Boolean(renderPlan.voice.provider?.trim()), "Voice provider exists."),
+    errorCheck("voice_name_exists", Boolean(renderPlan.voice.voice_name?.trim()), "Voice name exists.")
+  ];
 }
 
 function errorCheck(name: string, passed: boolean, message: string): PreflightCheck {
