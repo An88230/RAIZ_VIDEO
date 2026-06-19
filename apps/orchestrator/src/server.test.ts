@@ -192,6 +192,7 @@ interface ArtifactInventoryBody {
     has_publish_package?: boolean;
     has_youtube_upload_plan?: boolean;
     has_google_drive_export_plan?: boolean;
+    has_n8n_workflow_plan?: boolean;
     has_output?: boolean;
   };
 }
@@ -358,6 +359,36 @@ interface GoogleDriveExportPlanBody {
   safety?: {
     will_upload?: boolean;
     will_make_network_request?: boolean;
+    will_modify_video?: boolean;
+  };
+  metadata?: {
+    source?: string;
+    created_at?: string;
+  };
+}
+
+interface N8nWorkflowPlanBody {
+  platform?: string;
+  mode?: string;
+  trigger?: {
+    type?: string;
+    execution?: string;
+  };
+  inputs?: {
+    publish_package_path?: string;
+    youtube_upload_plan_path?: string;
+    google_drive_export_plan_path?: string;
+  };
+  workflow_steps?: Array<{ name?: string; enabled?: boolean }>;
+  references?: {
+    final_video_path?: string | null;
+    youtube_title?: string;
+    google_drive_filename?: string;
+  };
+  safety?: {
+    will_execute_workflow?: boolean;
+    will_make_network_request?: boolean;
+    will_upload?: boolean;
     will_modify_video?: boolean;
   };
   metadata?: {
@@ -2009,6 +2040,17 @@ if (
   throw new Error("Expected artifacts endpoint to detect youtube-upload.plan.json.");
 }
 
+const missingDriveN8nWorkflowPlanResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realSendJobId}/n8n-workflow-plan`
+});
+
+if (missingDriveN8nWorkflowPlanResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected n8n workflow plan before Google Drive export plan to return 409, got ${missingDriveN8nWorkflowPlanResponse.statusCode}.`
+  );
+}
+
 const googleDriveExportPlanResponse = await server.inject({
   method: "POST",
   url: `/jobs/${realSendJobId}/google-drive-export-plan`
@@ -2088,6 +2130,86 @@ if (
   )
 ) {
   throw new Error("Expected artifacts endpoint to detect google-drive-export.plan.json.");
+}
+
+const n8nWorkflowPlanResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${realSendJobId}/n8n-workflow-plan`
+});
+
+if (n8nWorkflowPlanResponse.statusCode !== 200) {
+  throw new Error(`Expected n8n workflow plan creation to return 200, got ${n8nWorkflowPlanResponse.statusCode}.`);
+}
+
+const n8nWorkflowPlan = JSON.parse(n8nWorkflowPlanResponse.body) as N8nWorkflowPlanBody;
+const n8nWorkflowPlanPath = resolve(realSendJobDir, "n8n-workflow.plan.json");
+
+if (
+  n8nWorkflowPlan.platform !== "n8n" ||
+  n8nWorkflowPlan.mode !== "workflow_plan" ||
+  n8nWorkflowPlan.trigger?.type !== "manual" ||
+  n8nWorkflowPlan.trigger.execution !== "disabled" ||
+  n8nWorkflowPlan.inputs?.publish_package_path !== publishPackagePath ||
+  n8nWorkflowPlan.inputs.youtube_upload_plan_path !== youtubeUploadPlanPath ||
+  n8nWorkflowPlan.inputs.google_drive_export_plan_path !== googleDriveExportPlanPath ||
+  !n8nWorkflowPlan.workflow_steps?.some((step) => step.name === "youtube_upload" && step.enabled === false) ||
+  !n8nWorkflowPlan.workflow_steps.some((step) => step.name === "google_drive_export" && step.enabled === false) ||
+  n8nWorkflowPlan.references?.final_video_path !== finalVideoPath ||
+  n8nWorkflowPlan.references.youtube_title !== sampleJob.title ||
+  n8nWorkflowPlan.references.google_drive_filename !== `${realSendJobId}.mp4` ||
+  n8nWorkflowPlan.safety?.will_execute_workflow !== false ||
+  n8nWorkflowPlan.safety.will_make_network_request !== false ||
+  n8nWorkflowPlan.safety.will_upload !== false ||
+  n8nWorkflowPlan.safety.will_modify_video !== false ||
+  n8nWorkflowPlan.metadata?.source !== "raiz_video_factory" ||
+  !n8nWorkflowPlan.metadata.created_at ||
+  !existsSync(n8nWorkflowPlanPath)
+) {
+  throw new Error("Expected n8n workflow plan to contain local no-execution workflow fields.");
+}
+
+const n8nWorkflowPlanStatusResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/status`
+});
+const n8nWorkflowPlanStatus = JSON.parse(n8nWorkflowPlanStatusResponse.body) as {
+  status?: string;
+  metadata?: {
+    n8n_workflow_plan_created?: boolean;
+    n8n_workflow_plan_path?: string;
+  };
+};
+
+if (
+  n8nWorkflowPlanStatus.status !== "rendered" ||
+  n8nWorkflowPlanStatus.metadata?.n8n_workflow_plan_created !== true ||
+  n8nWorkflowPlanStatus.metadata.n8n_workflow_plan_path !== n8nWorkflowPlanPath
+) {
+  throw new Error("Expected n8n workflow plan to keep status rendered and update metadata.");
+}
+
+const n8nWorkflowPlanEvents = readFileSync(resolve(realSendJobDir, "events.ndjson"), "utf8")
+  .trim()
+  .split("\n")
+  .map((line) => JSON.parse(line) as { type?: string });
+
+if (!n8nWorkflowPlanEvents.some((event) => event.type === "job.n8n_workflow_plan_created")) {
+  throw new Error("Expected n8n workflow plan creation to append job.n8n_workflow_plan_created event.");
+}
+
+const n8nWorkflowPlanArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${realSendJobId}/artifacts`
+});
+const n8nWorkflowPlanArtifacts = JSON.parse(n8nWorkflowPlanArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  n8nWorkflowPlanArtifacts.summary?.has_n8n_workflow_plan !== true ||
+  !n8nWorkflowPlanArtifacts.artifacts?.some(
+    (artifact) => artifact.name === "n8n-workflow.plan.json" && artifact.type === "n8n_workflow_plan" && artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect n8n-workflow.plan.json.");
 }
 
 const manualRejectJobId = "smoke-arabic-manual-reject-001";
@@ -2196,6 +2318,17 @@ if (rejectedGoogleDriveExportPlanResponse.statusCode !== 409) {
   );
 }
 
+const rejectedN8nWorkflowPlanResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${manualRejectJobId}/n8n-workflow-plan`
+});
+
+if (rejectedN8nWorkflowPlanResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected n8n workflow plan after manual rejection to return 409, got ${rejectedN8nWorkflowPlanResponse.statusCode}.`
+  );
+}
+
 const notRenderedReviewPackageResponse = await server.inject({
   method: "POST",
   url: "/jobs/smoke-arabic-prepare-001/review-package"
@@ -2259,6 +2392,17 @@ const notRenderedGoogleDriveExportPlanResponse = await server.inject({
 if (notRenderedGoogleDriveExportPlanResponse.statusCode !== 409) {
   throw new Error(
     `Expected Google Drive export plan for non-rendered job to return 409, got ${notRenderedGoogleDriveExportPlanResponse.statusCode}.`
+  );
+}
+
+const notRenderedN8nWorkflowPlanResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/smoke-arabic-prepare-001/n8n-workflow-plan"
+});
+
+if (notRenderedN8nWorkflowPlanResponse.statusCode !== 409) {
+  throw new Error(
+    `Expected n8n workflow plan for non-rendered job to return 409, got ${notRenderedN8nWorkflowPlanResponse.statusCode}.`
   );
 }
 
@@ -3170,6 +3314,15 @@ const unknownGoogleDriveExportPlanResponse = await server.inject({
 
 if (unknownGoogleDriveExportPlanResponse.statusCode !== 404) {
   throw new Error(`Expected unknown job Google Drive export plan to return 404, got ${unknownGoogleDriveExportPlanResponse.statusCode}.`);
+}
+
+const unknownN8nWorkflowPlanResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/unknown-job/n8n-workflow-plan"
+});
+
+if (unknownN8nWorkflowPlanResponse.statusCode !== 404) {
+  throw new Error(`Expected unknown job n8n workflow plan to return 404, got ${unknownN8nWorkflowPlanResponse.statusCode}.`);
 }
 
 const adapterHealthJob = {

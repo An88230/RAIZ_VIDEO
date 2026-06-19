@@ -38,6 +38,12 @@ import {
   JobGoogleDriveExportPlanStateError
 } from "./googleDriveExportPlan.js";
 import {
+  createN8nWorkflowPlan,
+  JobN8nWorkflowPlanArtifactError,
+  JobN8nWorkflowPlanReadinessError,
+  JobN8nWorkflowPlanStateError
+} from "./n8nWorkflowPlan.js";
+import {
   createYouTubeUploadPlan,
   JobYouTubeUploadPlanArtifactError,
   JobYouTubeUploadPlanReadinessError,
@@ -743,6 +749,35 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
         error instanceof JobGoogleDriveExportPlanStateError ||
         error instanceof JobGoogleDriveExportPlanReadinessError ||
         error instanceof JobGoogleDriveExportPlanArtifactError
+      ) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/n8n-workflow-plan", async (request, reply) => {
+    try {
+      return await createN8nWorkflowPlan(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (
+        error instanceof JobN8nWorkflowPlanStateError ||
+        error instanceof JobN8nWorkflowPlanReadinessError ||
+        error instanceof JobN8nWorkflowPlanArtifactError
       ) {
         return reply.code(409).send({
           status: "conflict",

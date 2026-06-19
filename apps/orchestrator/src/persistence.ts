@@ -69,6 +69,7 @@ export interface JobPaths {
   publishPackagePath: string;
   youtubeUploadPlanPath: string;
   googleDriveExportPlanPath: string;
+  n8nWorkflowPlanPath: string;
 }
 
 export class JobConflictError extends Error {
@@ -417,7 +418,8 @@ export function getJobPaths(jobId: string, options: PersistenceOptions = {}): Jo
     manualReviewRejectionPath: resolve(jobDir, "manual-review-rejection.json"),
     publishPackagePath: resolve(jobDir, "publish-package.json"),
     youtubeUploadPlanPath: resolve(jobDir, "youtube-upload.plan.json"),
-    googleDriveExportPlanPath: resolve(jobDir, "google-drive-export.plan.json")
+    googleDriveExportPlanPath: resolve(jobDir, "google-drive-export.plan.json"),
+    n8nWorkflowPlanPath: resolve(jobDir, "n8n-workflow.plan.json")
   };
 }
 
