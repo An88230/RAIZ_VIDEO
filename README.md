@@ -60,10 +60,13 @@ npm install
 npm test
 npm run build
 npm run dev:orchestrator
+./scripts/start-raiz.sh
 npm run raiz:local-pipeline
 ```
 
 The orchestrator listens on port `4000` by default.
+
+The RAIZ runtime connect script is documented in [START_RAIZ.md](docs/START_RAIZ.md). It starts RAIZ only and prints exact local health and pipeline commands without starting vendor services or Docker.
 
 The one-command local safe pipeline is documented in [RUN_LOCAL_PIPELINE.md](docs/RUN_LOCAL_PIPELINE.md). It runs the local artifact pipeline through the RAIZ API only and does not start Docker, call short-video-maker, upload, run n8n, or generate video.
 
