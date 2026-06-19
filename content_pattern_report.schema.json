@@ -1,0 +1,325 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nabil88.art/schemas/content_pattern_report.schema.json",
+  "title": "RAIZ Content Pattern Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "report_id",
+    "mode_id",
+    "mode_name",
+    "source_reference",
+    "analyzed_at",
+    "useful_curiosity",
+    "pattern_summary",
+    "extracted_format",
+    "mode_specific_analysis",
+    "scoring",
+    "rights_review",
+    "safety_review",
+    "opportunities",
+    "next_recommended_action"
+  ],
+  "properties": {
+    "report_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "mode_id": {
+      "type": "string",
+      "enum": ["tech_discovery", "home_maintenance", "daily_life"]
+    },
+    "mode_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_type", "source_label", "source_url", "source_video_downloaded"],
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "user_supplied_url",
+            "manual_observation",
+            "public_search_result",
+            "short_video_metadata",
+            "creator_reference",
+            "product_page",
+            "marketplace_listing",
+            "trend_report"
+          ]
+        },
+        "source_label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_url": {
+          "type": ["string", "null"]
+        },
+        "source_video_downloaded": {
+          "type": "boolean",
+          "const": false
+        }
+      }
+    },
+    "analyzed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "useful_curiosity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["why_useful", "why_surprising", "daily_problem_solved", "avoids_gross_content"],
+      "properties": {
+        "why_useful": {
+          "type": "string",
+          "minLength": 1
+        },
+        "why_surprising": {
+          "type": "string",
+          "minLength": 1
+        },
+        "daily_problem_solved": {
+          "type": "string",
+          "minLength": 1
+        },
+        "avoids_gross_content": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "pattern_summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "extracted_format": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hook_style",
+        "opening_moment",
+        "problem_solved",
+        "audience_pain",
+        "visual_structure",
+        "payoff",
+        "safe_original_remake_idea"
+      ],
+      "properties": {
+        "hook_style": {
+          "type": "string",
+          "minLength": 1
+        },
+        "opening_moment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "problem_solved": {
+          "type": "string",
+          "minLength": 1
+        },
+        "audience_pain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "visual_structure": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "payoff": {
+          "type": "string",
+          "minLength": 1
+        },
+        "safe_original_remake_idea": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "mode_specific_analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool_or_product_shown": {
+          "type": "string"
+        },
+        "affiliate_potential_notes": {
+          "type": "string"
+        },
+        "visible_problem": {
+          "type": "string"
+        },
+        "before_after_strength": {
+          "type": "string"
+        },
+        "tool_used": {
+          "type": "string"
+        },
+        "product_opportunity": {
+          "type": "string"
+        },
+        "safety_risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "daily_pain": {
+          "type": "string"
+        },
+        "curiosity_hook": {
+          "type": "string"
+        },
+        "practical_payoff": {
+          "type": "string"
+        },
+        "repeatability": {
+          "type": "string"
+        },
+        "affiliate_fit": {
+          "type": "string"
+        }
+      }
+    },
+    "scoring": {
+      "$ref": "#/$defs/content_scores"
+    },
+    "rights_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pattern_only",
+        "copies_source_video",
+        "uses_source_audio",
+        "watermark_removal_required",
+        "requires_original_assets",
+        "notes"
+      ],
+      "properties": {
+        "pattern_only": {
+          "type": "boolean",
+          "const": true
+        },
+        "copies_source_video": {
+          "type": "boolean",
+          "const": false
+        },
+        "uses_source_audio": {
+          "type": "boolean",
+          "const": false
+        },
+        "watermark_removal_required": {
+          "type": "boolean",
+          "const": false
+        },
+        "requires_original_assets": {
+          "type": "boolean",
+          "const": true
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "safety_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["no_download", "no_repost", "no_publishing_automation", "risks"],
+      "properties": {
+        "no_download": {
+          "type": "boolean",
+          "const": true
+        },
+        "no_repost": {
+          "type": "boolean",
+          "const": true
+        },
+        "no_publishing_automation": {
+          "type": "boolean",
+          "const": true
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "opportunities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "https://nabil88.art/schemas/content_opportunity.schema.json"
+      }
+    },
+    "next_recommended_action": {
+      "type": "string",
+      "enum": ["generate_original_remake_ideas", "generate_affiliate_angles", "reject_pattern"]
+    }
+  },
+  "$defs": {
+    "content_scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "curiosity_score",
+        "usefulness_score",
+        "originality_potential",
+        "affiliate_potential",
+        "production_difficulty",
+        "rights_risk",
+        "brand_fit",
+        "remake_safety"
+      ],
+      "properties": {
+        "curiosity_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "usefulness_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "originality_potential": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "affiliate_potential": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "production_difficulty": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "rights_risk": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "brand_fit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "remake_safety": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        }
+      }
+    }
+  }
+}

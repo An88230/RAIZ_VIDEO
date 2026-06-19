@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nabil88.art/schemas/content_radar_mode.schema.json",
+  "title": "RAIZ Content Radar Mode",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mode_id",
+    "name",
+    "description",
+    "search_focus",
+    "sample_keywords",
+    "source_types",
+    "exclude_patterns",
+    "safety_rules",
+    "scoring_rules",
+    "output_format",
+    "affiliate_angle_rules"
+  ],
+  "properties": {
+    "mode_id": {
+      "type": "string",
+      "enum": ["tech_discovery", "home_maintenance", "daily_life"]
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "search_focus": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "sample_keywords": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "source_types": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": [
+          "user_supplied_url",
+          "manual_observation",
+          "public_search_result",
+          "short_video_metadata",
+          "creator_reference",
+          "product_page",
+          "marketplace_listing",
+          "trend_report"
+        ]
+      }
+    },
+    "exclude_patterns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "safety_rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["rule_id", "description", "enforcement"],
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]+$"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "enforcement": {
+            "type": "string",
+            "enum": ["block", "warn", "review"]
+          }
+        }
+      }
+    },
+    "scoring_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "curiosity_score",
+        "usefulness_score",
+        "originality_potential",
+        "affiliate_potential",
+        "production_difficulty",
+        "rights_risk",
+        "brand_fit",
+        "remake_safety"
+      ],
+      "properties": {
+        "curiosity_score": {
+          "$ref": "#/$defs/score_rule"
+        },
+        "usefulness_score": {
+          "$ref": "#/$defs/score_rule"
+        },
+        "originality_potential": {
+          "$ref": "#/$defs/score_rule"
+        },
+        "affiliate_potential": {
+          "$ref": "#/$defs/score_rule"
+        },
+        "production_difficulty": {
+          "$ref": "#/$defs/score_rule"
+        },
+        "rights_risk": {
+          "$ref": "#/$defs/score_rule"
+        },
+        "brand_fit": {
+          "$ref": "#/$defs/score_rule"
+        },
+        "remake_safety": {
+          "$ref": "#/$defs/score_rule"
+        }
+      }
+    },
+    "output_format": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pattern_report_schema", "opportunity_schema", "artifact_policy"],
+      "properties": {
+        "pattern_report_schema": {
+          "type": "string",
+          "const": "content_pattern_report.schema.json"
+        },
+        "opportunity_schema": {
+          "type": "string",
+          "const": "content_opportunity.schema.json"
+        },
+        "artifact_policy": {
+          "type": "string",
+          "const": "local_json_only"
+        }
+      }
+    },
+    "affiliate_angle_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed_patterns",
+        "disallowed_patterns",
+        "disclosure_required",
+        "must_not_make_unverified_claims",
+        "must_use_original_or_licensed_assets"
+      ],
+      "properties": {
+        "allowed_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "disallowed_patterns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "disclosure_required": {
+          "type": "boolean",
+          "const": true
+        },
+        "must_not_make_unverified_claims": {
+          "type": "boolean",
+          "const": true
+        },
+        "must_use_original_or_licensed_assets": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    }
+  },
+  "$defs": {
+    "score_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "scale", "higher_is_better"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scale": {
+          "type": "string",
+          "const": "0-10"
+        },
+        "higher_is_better": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

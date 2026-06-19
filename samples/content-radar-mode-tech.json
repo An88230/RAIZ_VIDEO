@@ -1,0 +1,114 @@
+{
+  "mode_id": "tech_discovery",
+  "name": "Tech Discovery Mode",
+  "description": "Find Useful Curiosity patterns around AI tools, gadgets, apps, automation, useful websites, productivity tools, mobile accessories, and desk setup tools.",
+  "search_focus": [
+    "modern tech tools that solve a visible problem",
+    "short demos with a practical payoff",
+    "affiliate-friendly product categories",
+    "low-complexity original remake ideas"
+  ],
+  "sample_keywords": [
+    "AI tool you should know",
+    "useful gadget",
+    "automation app",
+    "desk setup tool",
+    "mobile accessory"
+  ],
+  "source_types": [
+    "user_supplied_url",
+    "manual_observation",
+    "public_search_result",
+    "short_video_metadata",
+    "product_page",
+    "marketplace_listing",
+    "trend_report"
+  ],
+  "exclude_patterns": [
+    "gross-out shock content",
+    "watermark removal requests",
+    "source video reposting",
+    "fake scarcity affiliate claims",
+    "privacy-invasive tool demos"
+  ],
+  "safety_rules": [
+    {
+      "rule_id": "no_video_download",
+      "description": "Analyze only the pattern; do not download or copy source video.",
+      "enforcement": "block"
+    },
+    {
+      "rule_id": "no_unverified_claims",
+      "description": "Do not claim tool performance, income, or outcomes that are not verified.",
+      "enforcement": "review"
+    },
+    {
+      "rule_id": "original_assets_only",
+      "description": "Remake ideas must use original screen recordings, licensed visuals, or owned assets.",
+      "enforcement": "block"
+    }
+  ],
+  "scoring_rules": {
+    "curiosity_score": {
+      "description": "How strongly the hook makes viewers want to see the tool or solution.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "usefulness_score": {
+      "description": "How clearly the tool solves a real productivity, workflow, or device problem.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "originality_potential": {
+      "description": "How easily RAIZ can create a new original demo without copying source assets.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "affiliate_potential": {
+      "description": "How naturally the format can support truthful product or category recommendations.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "production_difficulty": {
+      "description": "How hard it is to produce original footage, screen capture, or demonstrations.",
+      "scale": "0-10",
+      "higher_is_better": false
+    },
+    "rights_risk": {
+      "description": "How likely the idea depends on copyrighted footage, brand misuse, or creator imitation.",
+      "scale": "0-10",
+      "higher_is_better": false
+    },
+    "brand_fit": {
+      "description": "How well the idea fits RAIZ useful, premium, practical content.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "remake_safety": {
+      "description": "How safely the idea can be remade without copying, scraping, or unsafe claims.",
+      "scale": "0-10",
+      "higher_is_better": true
+    }
+  },
+  "output_format": {
+    "pattern_report_schema": "content_pattern_report.schema.json",
+    "opportunity_schema": "content_opportunity.schema.json",
+    "artifact_policy": "local_json_only"
+  },
+  "affiliate_angle_rules": {
+    "allowed_patterns": [
+      "problem-to-category recommendation",
+      "comparison checklist",
+      "setup improvement idea"
+    ],
+    "disallowed_patterns": [
+      "guaranteed income claims",
+      "fake urgency",
+      "undisclosed sponsorship",
+      "copying product page media without permission"
+    ],
+    "disclosure_required": true,
+    "must_not_make_unverified_claims": true,
+    "must_use_original_or_licensed_assets": true
+  }
+}

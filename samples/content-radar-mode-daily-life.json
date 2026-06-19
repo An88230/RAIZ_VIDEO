@@ -1,0 +1,114 @@
+{
+  "mode_id": "daily_life",
+  "name": "Daily Life Mode",
+  "description": "Find Useful Curiosity patterns around daily hacks, routines, cheap solutions, product use cases, habit fixes, surprising uses, and small lifestyle upgrades.",
+  "search_focus": [
+    "small daily pains with a fast practical payoff",
+    "ordinary objects used in surprising but safe ways",
+    "repeatable routines and habits",
+    "simple product use cases"
+  ],
+  "sample_keywords": [
+    "daily hack",
+    "cheap solution",
+    "habit fix",
+    "surprising use",
+    "lifestyle upgrade"
+  ],
+  "source_types": [
+    "user_supplied_url",
+    "manual_observation",
+    "public_search_result",
+    "short_video_metadata",
+    "creator_reference",
+    "product_page",
+    "trend_report"
+  ],
+  "exclude_patterns": [
+    "gross-out shock content",
+    "humiliation-first formats",
+    "unsafe body or health claims",
+    "source video reposting",
+    "watermark removal requests"
+  ],
+  "safety_rules": [
+    {
+      "rule_id": "no_video_download",
+      "description": "Analyze only the pattern; do not download or reuse source video.",
+      "enforcement": "block"
+    },
+    {
+      "rule_id": "no_health_claims_without_review",
+      "description": "Habit and lifestyle claims must avoid medical or body-result promises unless reviewed.",
+      "enforcement": "review"
+    },
+    {
+      "rule_id": "useful_curiosity_default",
+      "description": "Prefer useful, surprising, practical ideas over disgust, humiliation, or shock-only hooks.",
+      "enforcement": "block"
+    }
+  ],
+  "scoring_rules": {
+    "curiosity_score": {
+      "description": "How much the hook makes an ordinary problem feel worth watching.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "usefulness_score": {
+      "description": "How likely the viewer can apply the idea in daily life.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "originality_potential": {
+      "description": "How easily RAIZ can make a fresh example, script, and visual setup.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "affiliate_potential": {
+      "description": "How naturally the idea connects to a useful product category without hype.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "production_difficulty": {
+      "description": "How hard it is to produce the idea with simple local footage or licensed assets.",
+      "scale": "0-10",
+      "higher_is_better": false
+    },
+    "rights_risk": {
+      "description": "How likely the idea depends on copied footage, exact phrasing, or creator identity.",
+      "scale": "0-10",
+      "higher_is_better": false
+    },
+    "brand_fit": {
+      "description": "How well the idea fits RAIZ useful, practical, elegant everyday content.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "remake_safety": {
+      "description": "How safely the idea can be remade without unsafe advice or copied assets.",
+      "scale": "0-10",
+      "higher_is_better": true
+    }
+  },
+  "output_format": {
+    "pattern_report_schema": "content_pattern_report.schema.json",
+    "opportunity_schema": "content_opportunity.schema.json",
+    "artifact_policy": "local_json_only"
+  },
+  "affiliate_angle_rules": {
+    "allowed_patterns": [
+      "daily problem checklist",
+      "optional product category",
+      "budget-friendly setup idea"
+    ],
+    "disallowed_patterns": [
+      "health transformation claims",
+      "fake before/after claims",
+      "undisclosed sponsorship",
+      "source video reuse"
+    ],
+    "disclosure_required": true,
+    "must_not_make_unverified_claims": true,
+    "must_use_original_or_licensed_assets": true
+  }
+}

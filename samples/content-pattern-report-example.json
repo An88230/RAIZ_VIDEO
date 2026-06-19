@@ -1,0 +1,143 @@
+{
+  "report_id": "pattern_report_tech_001",
+  "mode_id": "tech_discovery",
+  "mode_name": "Tech Discovery Mode",
+  "source_reference": {
+    "source_type": "manual_observation",
+    "source_label": "Observed short-form pattern: desk timer automation demo",
+    "source_url": null,
+    "source_video_downloaded": false
+  },
+  "analyzed_at": "2026-06-20T00:00:00.000Z",
+  "useful_curiosity": {
+    "why_useful": "Shows a small automation that reduces context switching during focused work.",
+    "why_surprising": "The payoff appears quickly because a simple desk timer triggers a visible workflow change.",
+    "daily_problem_solved": "Forgetting to start focus mode, silence notifications, or track sessions.",
+    "avoids_gross_content": true
+  },
+  "pattern_summary": "A short demo opens with a common productivity failure, shows a compact tool, and ends with a simple automated routine that feels easy to copy.",
+  "extracted_format": {
+    "hook_style": "Problem-first useful curiosity hook",
+    "opening_moment": "Creator shows a cluttered desk and missed notification focus setup.",
+    "problem_solved": "Starting a repeatable focus routine without manual app switching.",
+    "audience_pain": "People who want a clean desk workflow but forget to prepare their digital tools.",
+    "visual_structure": [
+      "show the daily friction",
+      "introduce the tool category",
+      "show one automation step",
+      "show the clean final setup"
+    ],
+    "payoff": "A single button or timer creates a visible focus mode routine.",
+    "safe_original_remake_idea": "Film an original RAIZ desk setup where a generic timer starts a local focus checklist, then show an original screen recording of notifications being silenced."
+  },
+  "mode_specific_analysis": {
+    "tool_or_product_shown": "desk timer or focus button category",
+    "affiliate_potential_notes": "Can recommend a general desk timer, focus button, or phone stand category without claiming guaranteed productivity results."
+  },
+  "scoring": {
+    "curiosity_score": 8,
+    "usefulness_score": 8,
+    "originality_potential": 9,
+    "affiliate_potential": 7,
+    "production_difficulty": 3,
+    "rights_risk": 2,
+    "brand_fit": 9,
+    "remake_safety": 9
+  },
+  "rights_review": {
+    "pattern_only": true,
+    "copies_source_video": false,
+    "uses_source_audio": false,
+    "watermark_removal_required": false,
+    "requires_original_assets": true,
+    "notes": "Use a new script, original desk footage, and owned screen recordings."
+  },
+  "safety_review": {
+    "no_download": true,
+    "no_repost": true,
+    "no_publishing_automation": true,
+    "risks": [
+      "Avoid claiming guaranteed productivity outcomes.",
+      "Avoid showing private notifications or sensitive app content."
+    ]
+  },
+  "opportunities": [
+    {
+      "opportunity_id": "content_opp_focus_timer_001",
+      "source_report_id": "pattern_report_tech_001",
+      "mode_id": "tech_discovery",
+      "title": "One Button Focus Desk Setup",
+      "original_production_idea": "Create an original 30-second RAIZ short where a simple desk timer triggers a focus checklist: phone face down, notifications silenced, note app opened, and task card visible.",
+      "target_audience": "Creators, students, and remote workers who want a cleaner focus routine.",
+      "value_proposition": "A practical desk workflow that feels useful immediately and can be recreated with common tools.",
+      "production_plan": {
+        "format": "short_video",
+        "estimated_duration_seconds": 30,
+        "scenes": [
+          {
+            "scene_id": "scene_01",
+            "purpose": "Show the daily focus friction.",
+            "original_asset_needed": "Owned desk footage with staged notifications."
+          },
+          {
+            "scene_id": "scene_02",
+            "purpose": "Show the timer or focus button category.",
+            "original_asset_needed": "Owned close-up product footage or licensed stock."
+          },
+          {
+            "scene_id": "scene_03",
+            "purpose": "Show the payoff routine.",
+            "original_asset_needed": "Original screen recording with no private data."
+          }
+        ]
+      },
+      "affiliate_angles": [
+        {
+          "angle": "desk focus timer category",
+          "product_category": "desk timer",
+          "claim_safety": "safe_category_claim"
+        },
+        {
+          "angle": "phone stand for focus setup",
+          "product_category": "mobile accessory",
+          "claim_safety": "safe_category_claim"
+        }
+      ],
+      "required_assets": [
+        "original desk footage",
+        "original phone screen recording",
+        "licensed or owned product shot"
+      ],
+      "rights_plan": {
+        "pattern_only": true,
+        "original_or_licensed_assets": true,
+        "source_assets_reused": false,
+        "attribution_notes": "No source footage, audio, captions, or creator identity reused."
+      },
+      "safety_constraints": [
+        "Do not show private data.",
+        "Do not claim guaranteed productivity results.",
+        "Disclose affiliate relationship in future publishing workflow."
+      ],
+      "scoring": {
+        "curiosity_score": 8,
+        "usefulness_score": 8,
+        "originality_potential": 9,
+        "affiliate_potential": 7,
+        "production_difficulty": 3,
+        "rights_risk": 2,
+        "brand_fit": 9,
+        "remake_safety": 9
+      },
+      "execution_policy": {
+        "will_download_source_video": false,
+        "will_repost_source_video": false,
+        "will_remove_watermark": false,
+        "will_scrape": false,
+        "will_publish": false
+      },
+      "created_at": "2026-06-20T00:00:01.000Z"
+    }
+  ],
+  "next_recommended_action": "generate_original_remake_ideas"
+}

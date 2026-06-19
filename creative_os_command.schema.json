@@ -43,7 +43,12 @@
         "get_latest_render_status",
         "get_review_package_status",
         "get_publish_package_status",
-        "get_next_recommended_action"
+        "get_next_recommended_action",
+        "list_content_radar_modes",
+        "get_content_radar_mode",
+        "analyze_content_pattern",
+        "generate_original_remake_ideas",
+        "generate_affiliate_angles"
       ]
     },
     "natural_language_command": {
@@ -152,6 +157,42 @@
           "minLength": 1
         },
         "must_not_publish": {
+          "type": "boolean",
+          "const": true
+        },
+        "content_radar_mode_id": {
+          "type": "string",
+          "enum": ["tech_discovery", "home_maintenance", "daily_life"]
+        },
+        "content_reference": {
+          "type": "object"
+        },
+        "pattern_report_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "analysis_goal": {
+          "type": "string",
+          "enum": [
+            "pattern_report",
+            "original_remake_ideas",
+            "affiliate_angles",
+            "mode_lookup"
+          ]
+        },
+        "must_not_download": {
+          "type": "boolean",
+          "const": true
+        },
+        "must_not_scrape": {
+          "type": "boolean",
+          "const": true
+        },
+        "must_not_repost": {
+          "type": "boolean",
+          "const": true
+        },
+        "copy_patterns_not_videos": {
           "type": "boolean",
           "const": true
         }

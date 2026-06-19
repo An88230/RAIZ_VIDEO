@@ -25,6 +25,11 @@ invent commands, shell snippets, paths, or side effects.
 | `get_review_package_status` | Report whether a review package exists. | `storage/jobs/` | Read-only. | Not required. |
 | `get_publish_package_status` | Report publishing readiness/status only. | `storage/jobs/` | Read-only; publishing is never executed. | Not required. |
 | `get_next_recommended_action` | Suggest the next safe local action from current artifacts. | `storage/jobs/` | Read-only. | Not required. |
+| `list_content_radar_modes` | List available Content Radar modes. | `docs/`, `samples/` | Read-only. | Not required. |
+| `get_content_radar_mode` | Return one Content Radar mode contract. | `docs/`, `samples/` | Read-only. | Not required. |
+| `analyze_content_pattern` | Produce a pattern-only analysis from a user-supplied reference or manual observation. | Local JSON artifacts only in future implementation. | Analysis only; no scraping, download, or repost. | Not required. |
+| `generate_original_remake_ideas` | Generate original/licensed remake ideas from a pattern report. | Local JSON artifacts only in future implementation. | Analysis only; no render, upload, or publish. | Not required. |
+| `generate_affiliate_angles` | Generate truthful affiliate angle suggestions from a pattern report. | Local JSON artifacts only in future implementation. | Analysis only; no claims execution, upload, or publish. | Not required. |
 
 ## Required Action Definition
 
@@ -77,6 +82,33 @@ If a publish package exists, the response should say:
 ```text
 جاهز للمراجعة قبل النشر.
 ```
+
+## Content Radar Semantics
+
+Content Radar actions are read-only analysis actions in v1. They may classify
+content patterns, list modes, summarize useful hooks, propose original remake
+ideas, and suggest affiliate angles.
+
+They must not:
+
+- download source videos
+- scrape platforms
+- repost videos
+- remove watermarks
+- bypass copyright
+- upload or publish
+- call YouTube, Google Drive, or n8n
+- execute shell commands
+
+The operating rule is:
+
+```text
+Copy patterns, not videos.
+```
+
+Default radar behavior follows Useful Curiosity: useful, surprising, practical,
+or problem-solving content. Gross-out, disgust-first, humiliation-first, and
+shock-only formats are excluded from default mode behavior.
 
 ## Action Results
 

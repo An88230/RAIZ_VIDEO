@@ -10,10 +10,19 @@ const commandSchema = readJson(resolve(repoRoot, "creative_os_command.schema.jso
 const resultSchema = readJson(resolve(repoRoot, "creative_os_action_result.schema.json"));
 const showModeTriggerSchema = readJson(resolve(repoRoot, "show_mode_trigger.schema.json"));
 const showModeStatusResponseSchema = readJson(resolve(repoRoot, "show_mode_status_response.schema.json"));
+const contentRadarModeSchema = readJson(resolve(repoRoot, "content_radar_mode.schema.json"));
+const contentPatternReportSchema = readJson(resolve(repoRoot, "content_pattern_report.schema.json"));
+const contentOpportunitySchema = readJson(resolve(repoRoot, "content_opportunity.schema.json"));
 const sampleCommand = readJson(resolve(repoRoot, "samples/creative-os-command-render-arabic.json"));
 const showModeTrigger = readJson(resolve(repoRoot, "samples/show-mode-double-clap-trigger.json"));
 const showModeSystemQuestion = readJson(resolve(repoRoot, "samples/show-mode-system-status-question.json"));
 const showModePublishQuestion = readJson(resolve(repoRoot, "samples/show-mode-publish-status-question.json"));
+const contentRadarModes = [
+  readJson(resolve(repoRoot, "samples/content-radar-mode-tech.json")),
+  readJson(resolve(repoRoot, "samples/content-radar-mode-home-maintenance.json")),
+  readJson(resolve(repoRoot, "samples/content-radar-mode-daily-life.json"))
+];
+const contentPatternReport = readJson(resolve(repoRoot, "samples/content-pattern-report-example.json"));
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 ajv.addFormat("date-time", true);
@@ -22,6 +31,13 @@ validate(commandSchema, sampleCommand, "sample Creative OS command");
 validate(showModeTriggerSchema, showModeTrigger, "sample Show Mode trigger");
 validate(commandSchema, showModeSystemQuestion, "sample Show Mode system status question");
 validate(commandSchema, showModePublishQuestion, "sample Show Mode publish status question");
+for (const mode of contentRadarModes) {
+  validate(contentRadarModeSchema, mode, `sample Content Radar mode ${mode.mode_id}`);
+}
+validate(contentPatternReportSchema, contentPatternReport, "sample Content Radar pattern report");
+for (const opportunity of contentPatternReport.opportunities) {
+  validate(contentOpportunitySchema, opportunity, `sample Content Radar opportunity ${opportunity.opportunity_id}`);
+}
 
 if (
   sampleCommand.requested_action !== "run_local_render" ||
@@ -149,6 +165,123 @@ if (
   throw new Error("Expected publish status semantics to report readiness only.");
 }
 
+const expectedContentRadarModes = new Set(["tech_discovery", "home_maintenance", "daily_life"]);
+for (const mode of contentRadarModes) {
+  expectedContentRadarModes.delete(mode.mode_id);
+
+  for (const scoreName of [
+    "curiosity_score",
+    "usefulness_score",
+    "originality_potential",
+    "affiliate_potential",
+    "production_difficulty",
+    "rights_risk",
+    "brand_fit",
+    "remake_safety"
+  ]) {
+    if (!mode.scoring_rules?.[scoreName]) {
+      throw new Error(`Expected ${mode.mode_id} to define ${scoreName}.`);
+    }
+  }
+
+  if (
+    !mode.exclude_patterns.some((pattern) => pattern.includes("gross")) ||
+    !mode.safety_rules.some((rule) => rule.rule_id === "no_video_download") ||
+    mode.affiliate_angle_rules?.disclosure_required !== true ||
+    mode.affiliate_angle_rules?.must_use_original_or_licensed_assets !== true
+  ) {
+    throw new Error(`Expected ${mode.mode_id} to enforce useful, safe, rights-aware radar behavior.`);
+  }
+}
+
+if (expectedContentRadarModes.size > 0) {
+  throw new Error(`Missing Content Radar modes: ${Array.from(expectedContentRadarModes).join(", ")}`);
+}
+
+if (
+  contentPatternReport.source_reference?.source_video_downloaded !== false ||
+  contentPatternReport.useful_curiosity?.avoids_gross_content !== true ||
+  contentPatternReport.rights_review?.pattern_only !== true ||
+  contentPatternReport.rights_review?.copies_source_video !== false ||
+  contentPatternReport.rights_review?.uses_source_audio !== false ||
+  contentPatternReport.rights_review?.watermark_removal_required !== false ||
+  contentPatternReport.safety_review?.no_download !== true ||
+  contentPatternReport.safety_review?.no_repost !== true ||
+  contentPatternReport.safety_review?.no_publishing_automation !== true
+) {
+  throw new Error("Expected Content Radar report to copy patterns, not videos.");
+}
+
+for (const opportunity of contentPatternReport.opportunities) {
+  if (
+    opportunity.execution_policy?.will_download_source_video !== false ||
+    opportunity.execution_policy?.will_repost_source_video !== false ||
+    opportunity.execution_policy?.will_remove_watermark !== false ||
+    opportunity.execution_policy?.will_scrape !== false ||
+    opportunity.execution_policy?.will_publish !== false ||
+    opportunity.rights_plan?.original_or_licensed_assets !== true ||
+    opportunity.rights_plan?.source_assets_reused !== false
+  ) {
+    throw new Error(`Expected ${opportunity.opportunity_id} to be original/licensed and local-safe.`);
+  }
+}
+
+const contentRadarCommand = {
+  command_id: "cmd_content_radar_analyze_001",
+  source: "typed_input",
+  requested_action: "analyze_content_pattern",
+  natural_language_command: "Analyze this tech discovery pattern and suggest an original remake only.",
+  project_context: {
+    workspace: "RAIZ_VIDEO",
+    project: "RAIZ Content Radar",
+    language: "en",
+    direction: "ltr"
+  },
+  payload: {
+    content_radar_mode_id: "tech_discovery",
+    analysis_goal: "pattern_report",
+    content_reference: {
+      source_type: "manual_observation",
+      label: "desk timer automation demo"
+    },
+    must_not_download: true,
+    must_not_scrape: true,
+    must_not_repost: true,
+    must_not_publish: true,
+    copy_patterns_not_videos: true
+  },
+  safety: {
+    requires_confirmation: false,
+    allow_arbitrary_shell: false,
+    allowed_paths: ["docs/", "samples/"],
+    secrets_in_payload: false,
+    audit_log_required: true,
+    network_allowed: false
+  },
+  created_at: "2026-06-20T00:00:06.000Z"
+};
+validate(commandSchema, contentRadarCommand, "sample Content Radar command");
+
+const contentRadarResult = {
+  command_id: contentRadarCommand.command_id,
+  action_id: contentRadarCommand.requested_action,
+  status: "succeeded",
+  summary: "Pattern-only Content Radar analysis completed without scraping or downloading.",
+  artifacts: [
+    {
+      name: "content-pattern-report-example.json",
+      path: "samples/content-pattern-report-example.json",
+      type: "content_pattern_report",
+      exists: true
+    }
+  ],
+  logs: ["Copied pattern structure only; no source video, audio, upload, or shell execution."],
+  next_recommended_action: "generate_original_remake_ideas",
+  errors: [],
+  completed_at: "2026-06-20T00:00:07.000Z"
+};
+validate(resultSchema, contentRadarResult, "sample Content Radar action result");
+
 const rejectedShellCommand = {
   ...sampleCommand,
   requested_action: "run_shell_command",
@@ -171,6 +304,9 @@ function readJson(path) {
 function compile(schema) {
   const validator = new Ajv2020({ allErrors: true, strict: true });
   validator.addFormat("date-time", true);
+  if (schema.$id !== contentOpportunitySchema.$id) {
+    validator.addSchema(contentOpportunitySchema);
+  }
   return validator.compile(schema);
 }
 

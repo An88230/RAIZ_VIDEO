@@ -40,7 +40,12 @@
         "get_latest_render_status",
         "get_review_package_status",
         "get_publish_package_status",
-        "get_next_recommended_action"
+        "get_next_recommended_action",
+        "list_content_radar_modes",
+        "get_content_radar_mode",
+        "analyze_content_pattern",
+        "generate_original_remake_ideas",
+        "generate_affiliate_angles"
       ]
     },
     "status": {
@@ -103,7 +108,12 @@
         "get_latest_render_status",
         "get_review_package_status",
         "get_publish_package_status",
-        "get_next_recommended_action"
+        "get_next_recommended_action",
+        "list_content_radar_modes",
+        "get_content_radar_mode",
+        "analyze_content_pattern",
+        "generate_original_remake_ideas",
+        "generate_affiliate_angles"
       ]
     },
     "errors": {

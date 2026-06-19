@@ -1,0 +1,114 @@
+{
+  "mode_id": "home_maintenance",
+  "name": "Home & Maintenance Mode",
+  "description": "Find Useful Curiosity patterns around cleaning, repair, maintenance, storage, organization, bathroom fixes, kitchen organization, and appliance care.",
+  "search_focus": [
+    "visible home problems with clear before/after payoff",
+    "safe small-tool demonstrations",
+    "cleaning and organization formats",
+    "maintenance reminders with product opportunities"
+  ],
+  "sample_keywords": [
+    "cleaning hack",
+    "home repair tool",
+    "bathroom fix",
+    "kitchen organization",
+    "appliance maintenance"
+  ],
+  "source_types": [
+    "user_supplied_url",
+    "manual_observation",
+    "public_search_result",
+    "short_video_metadata",
+    "product_page",
+    "marketplace_listing",
+    "trend_report"
+  ],
+  "exclude_patterns": [
+    "dangerous chemical mixing",
+    "unsafe electrical repair",
+    "gross-out shock content",
+    "source video reposting",
+    "watermark removal requests"
+  ],
+  "safety_rules": [
+    {
+      "rule_id": "physical_safety_review",
+      "description": "Flag electricity, plumbing, chemicals, ladders, blades, heat, pressure, and appliance disassembly.",
+      "enforcement": "review"
+    },
+    {
+      "rule_id": "no_video_download",
+      "description": "Analyze the visible format only; do not download or reuse source footage.",
+      "enforcement": "block"
+    },
+    {
+      "rule_id": "professional_help_when_needed",
+      "description": "High-risk repairs should become warning/checklist content rather than a direct tutorial.",
+      "enforcement": "review"
+    }
+  ],
+  "scoring_rules": {
+    "curiosity_score": {
+      "description": "How strongly the before/after or visible problem pulls attention.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "usefulness_score": {
+      "description": "How practical the solution is for everyday home maintenance.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "originality_potential": {
+      "description": "How easily RAIZ can create a new safe demo using owned footage.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "affiliate_potential": {
+      "description": "How naturally tools, cleaners, organizers, or parts can be recommended.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "production_difficulty": {
+      "description": "How hard it is to stage the problem, demo the fix, and show a credible result.",
+      "scale": "0-10",
+      "higher_is_better": false
+    },
+    "rights_risk": {
+      "description": "How likely the format depends on copied footage, exact claims, or creator imitation.",
+      "scale": "0-10",
+      "higher_is_better": false
+    },
+    "brand_fit": {
+      "description": "How well the idea fits RAIZ practical, useful, non-gross storytelling.",
+      "scale": "0-10",
+      "higher_is_better": true
+    },
+    "remake_safety": {
+      "description": "How safely the idea can be remade without unsafe instructions or copied assets.",
+      "scale": "0-10",
+      "higher_is_better": true
+    }
+  },
+  "output_format": {
+    "pattern_report_schema": "content_pattern_report.schema.json",
+    "opportunity_schema": "content_opportunity.schema.json",
+    "artifact_policy": "local_json_only"
+  },
+  "affiliate_angle_rules": {
+    "allowed_patterns": [
+      "tool checklist",
+      "maintenance kit recommendation",
+      "before/after product category"
+    ],
+    "disallowed_patterns": [
+      "dangerous chemical claims",
+      "professional-grade repair advice without review",
+      "undisclosed sponsorship",
+      "copied source footage"
+    ],
+    "disclosure_required": true,
+    "must_not_make_unverified_claims": true,
+    "must_use_original_or_licensed_assets": true
+  }
+}

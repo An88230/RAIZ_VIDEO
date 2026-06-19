@@ -71,6 +71,25 @@ publish package state, and the next recommended safe action.
 publish. If a separate future publish action is introduced, it must be explicit,
 registered, confirmed, and outside this read-only status boundary.
 
+## Content Radar Boundary
+
+Content Radar is an analysis boundary, not a scraping or copying boundary. It may
+list modes, inspect local contracts, analyze user-supplied references, classify
+patterns, and generate original remake or affiliate angle ideas.
+
+Content Radar must not download videos, repost videos, remove watermarks, bypass
+copyright, scrape platforms, upload, publish, call YouTube, call Google Drive,
+call n8n, execute shell commands, or run model-generated terminal commands.
+
+The Local Agent must preserve the policy:
+
+```text
+Copy patterns, not videos.
+```
+
+Generated ideas must use original or licensed assets and must avoid unverified
+affiliate claims.
+
 ## Audit Boundary
 
 Every action writes an audit log entry in the future Local Agent production path.
