@@ -28,6 +28,11 @@ if [[ -z "$JOB_ID" ]]; then
   JOB_ID="$FALLBACK_JOB_ID"
 fi
 
+if [[ ! "$JOB_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+  echo "[FAIL] Unsafe job_id for local pipeline reset support: $JOB_ID"
+  exit 1
+fi
+
 TMP_DIR="$(mktemp -d)"
 LAST_RESPONSE="$TMP_DIR/last-response.json"
 trap 'rm -rf "$TMP_DIR"' EXIT
@@ -141,6 +146,8 @@ request "system config" "GET" "/system/config" "200"
 
 REAL_RENDER_ENABLED="$(json_field "$LAST_RESPONSE" "realRenderEnabled")"
 STORAGE_DIR="$(json_field "$LAST_RESPONSE" "storageDir")"
+STORAGE_DIR="${STORAGE_DIR:-storage/jobs}"
+JOB_DIR="${STORAGE_DIR%/}/$JOB_ID"
 
 if [[ "$REAL_RENDER_ENABLED" != "true" ]]; then
   echo "[FAIL] execution guard"
@@ -149,6 +156,20 @@ if [[ "$REAL_RENDER_ENABLED" != "true" ]]; then
   echo "       RAIZ_ENABLE_REAL_RENDER=true npm run dev --workspace @raiz/orchestrator"
   echo "       No short-video-maker process, Docker, upload, n8n workflow, or real render is started by this script."
   exit 1
+fi
+
+if [[ "${RAIZ_RESET_JOB:-false}" == "true" ]]; then
+  if [[ -z "$STORAGE_DIR" || "$JOB_DIR" == "/" || "$JOB_DIR" == "." || "$JOB_DIR" == "$JOB_ID" ]]; then
+    echo "[FAIL] Refusing to reset unsafe job directory: ${JOB_DIR:-empty}"
+    exit 1
+  fi
+
+  echo "[WARN] RAIZ_RESET_JOB=true; deleting existing job folder before queue step:"
+  echo "       $JOB_DIR"
+  rm -rf -- "$JOB_DIR"
+  echo "[OK]   reset job folder"
+else
+  echo "[OK]   reset disabled"
 fi
 
 request "queue job" "POST" "/jobs/render" "202" "$SAMPLE_JOB"
@@ -177,10 +198,9 @@ require_last_field "ready for real HTTP sender" "ready_for_real_http_sender" "tr
 request "artifact inventory" "GET" "/jobs/$JOB_ID/artifacts" "200"
 
 ARTIFACT_COUNT="$(json_field "$LAST_RESPONSE" "summary.total_artifacts")"
-JOB_DIR="${STORAGE_DIR:-storage/jobs}/$JOB_ID/"
 
 echo
 echo "[OK]   Pipeline completed."
 echo "       Artifacts detected: ${ARTIFACT_COUNT:-unknown}"
-echo "       Final job folder: $JOB_DIR"
+echo "       Final job folder: $JOB_DIR/"
 echo "       No short-video-maker process, Docker, upload, n8n workflow, or video generation was started by this script."

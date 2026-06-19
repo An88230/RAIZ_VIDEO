@@ -70,6 +70,8 @@ The RAIZ runtime connect script is documented in [START_RAIZ.md](docs/START_RAIZ
 
 The one-command local safe pipeline is documented in [RUN_LOCAL_PIPELINE.md](docs/RUN_LOCAL_PIPELINE.md). It runs the local artifact pipeline through the RAIZ API only and does not start Docker, call short-video-maker, upload, run n8n, or generate video.
 
+To re-run the sample job intentionally, use `RAIZ_RESET_JOB=true RAIZ_API_URL=http://127.0.0.1:4000 npm run raiz:local-pipeline`. Reset is off by default.
+
 Current endpoints:
 
 - `GET /adapters/short-video-maker/health`

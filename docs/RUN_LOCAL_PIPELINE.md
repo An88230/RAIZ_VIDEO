@@ -35,6 +35,18 @@ Or through npm:
 npm run raiz:local-pipeline
 ```
 
+To re-run the same sample job, explicitly reset the local job folder before queueing:
+
+```bash
+RAIZ_RESET_JOB=true RAIZ_API_URL=http://127.0.0.1:4000 npm run raiz:local-pipeline
+```
+
+Reset is disabled by default. When `RAIZ_RESET_JOB=true`, the script prints a warning and deletes only:
+
+```text
+storage/jobs/{job_id}
+```
+
 Defaults:
 
 ```text
@@ -50,4 +62,4 @@ RAIZ_API_URL=http://127.0.0.1:4000 ./scripts/run-local-pipeline.sh
 RAIZ_SAMPLE_JOB=samples/valid-arabic-9x16-job.json ./scripts/run-local-pipeline.sh
 ```
 
-The script stops on the first failed step and prints the response body. Duplicate `job_id` values still return `409 conflict`; use a clean job id or clear local storage intentionally before re-running.
+The script stops on the first failed step and prints the response body. Duplicate `job_id` values still return `409 conflict` unless `RAIZ_RESET_JOB=true` is used intentionally.
