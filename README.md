@@ -86,6 +86,38 @@ Requirements: Node 20+, FFmpeg on `PATH`, and (for the local fallback voice) mac
 composition ids allow only `a-z A-Z 0-9 -`, so RAIZ `template_id` underscores are
 mapped to hyphens (`raiz_dark_hook_01` -> `raiz-dark-hook-01`).
 
+### Running the render through the orchestrator
+
+The same render is wired into the orchestrator as a guarded route:
+
+```bash
+RAIZ_ENABLE_REAL_RENDER=true npm run dev:orchestrator
+# then, for a job that is `preparing` with `preflight_status: passed`:
+curl -X POST http://127.0.0.1:4000/jobs/{job_id}/render/remotion-direct
+```
+
+The output MP4 lands at `storage/jobs/{job_id}/output/{filename}` and the job moves
+to `rendered`.
+
+### Local b-roll videos
+
+Put your own local background clips here (shared pool, gitignored):
+
+```text
+storage/assets/broll/
+```
+
+Then point the job at them:
+
+```json
+"assets": { "broll_source": "local", "broll_folder": "storage/assets/broll" }
+```
+
+Prefer vertical `9:16` `.mp4` clips. Local b-roll is the brand-first source; Pexels
+is an optional fallback only. Background footage is **not consumed by the render
+yet** — that arrives in the media-assets phase; this just establishes where your
+clips live so they are ready.
+
 ## Phase 21 Commands
 
 ```bash
@@ -117,6 +149,7 @@ Current endpoints:
 - `POST /jobs/:id/prepare`
 - `POST /jobs/:id/preflight`
 - `POST /jobs/:id/mock-render`
+- `POST /jobs/:id/render/remotion-direct`
 - `POST /jobs/:id/adapter-health`
 - `POST /jobs/:id/adapter-payload/short-video-maker`
 - `POST /jobs/:id/upstream-request/short-video-maker`
@@ -151,6 +184,8 @@ storage/jobs/{job_id}/events.ndjson
 Preflight also checks declared local voice and asset paths. Missing local voice files, b-roll folders, music files, or logo files are warnings only. Warning-only preflight still passes and leaves the job in `preparing`.
 
 `POST /jobs/:id/mock-render` requires `preflight_status: passed`, moves the job through `rendering -> rendered`, and writes a text artifact at `storage/jobs/{job_id}/output/{job_id}.mock-render.txt`. It does not call a render engine and does not generate video.
+
+`POST /jobs/:id/render/remotion-direct` is the **guarded real render** for the v1 Arabic engine. It requires `RAIZ_ENABLE_REAL_RENDER=true`, `status: preparing`, and `preflight_status: passed`. It runs the Remotion-direct pipeline ([scripts/render-arabic-local.mjs](scripts/render-arabic-local.mjs)) against the stored job, writes the MP4 to `storage/jobs/{job_id}/output/{filename}` plus `render-manifest.remotion-direct.json`, and moves the job `preparing -> rendering -> rendered` (or `failed`). It does not publish, upload, touch `vendor/`, or start Docker. Tests inject a fake renderer; real Remotion/FFmpeg runs only when the route is called with the guard enabled.
 
 `GET /health` returns a lightweight liveness response for the orchestrator itself, including the current real render flag. It does not touch storage, start processes, or call the network.
 

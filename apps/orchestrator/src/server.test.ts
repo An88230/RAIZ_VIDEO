@@ -11,6 +11,7 @@ import {
 } from "./executionGuard.js";
 import { createServer } from "./server.js";
 import { sendShortVideoMakerWithMockedHttp, type HttpClient } from "./shortVideoMakerMockHttpSender.js";
+import { type RemotionRenderer } from "./remotionDirectRender.js";
 
 const managedEnvKeys = [
   "RAIZ_ENABLE_REAL_RENDER",
@@ -70,7 +71,27 @@ const realHttpClient: HttpClient = {
     };
   }
 };
-const server = createServer({ storageRoot, shortVideoMakerVendorPath, shortVideoMakerHttpClient: realHttpClient });
+const fakeRemotionRenderer: RemotionRenderer = {
+  async render(input) {
+    const outputPath = resolve(input.outputDir, input.outputFilename);
+    writeFileSync(outputPath, "fake-remotion-mp4-bytes");
+    return {
+      ok: true,
+      outputPath,
+      durationSeconds: 5,
+      rawVideoPath: resolve(input.outputDir, "raw.mp4"),
+      captionsSrtPath: resolve(input.outputDir, "captions.srt"),
+      captionsAssPath: resolve(input.outputDir, "captions.ass"),
+      message: "fake remotion render"
+    };
+  }
+};
+const server = createServer({
+  storageRoot,
+  shortVideoMakerVendorPath,
+  shortVideoMakerHttpClient: realHttpClient,
+  remotionRenderer: fakeRemotionRenderer
+});
 
 const defaultEnvConfig = loadEnvConfig();
 
@@ -3618,6 +3639,81 @@ const upstreamArtifactPath = resolve(
 
 if (!existsSync(upstreamArtifactPath)) {
   throw new Error("Expected upstream request endpoint to persist short-video-maker-upstream-request.json.");
+}
+
+// --- remotion_direct guarded render route ----------------------------------
+const remotionRenderJobId = "remotion-direct-001";
+await prepareAndPreflight(remotionRenderJobId, {
+  type: "edge_tts",
+  provider: "edge",
+  voice_name: "ar-SA-HamedNeural"
+});
+
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
+const blockedRender = await server.inject({
+  method: "POST",
+  url: `/jobs/${remotionRenderJobId}/render/remotion-direct`
+});
+
+if (blockedRender.statusCode !== 403) {
+  throw new Error(`Expected guarded remotion-direct render to return 403, got ${blockedRender.statusCode}.`);
+}
+
+process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+const okRender = await server.inject({
+  method: "POST",
+  url: `/jobs/${remotionRenderJobId}/render/remotion-direct`
+});
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
+
+if (okRender.statusCode !== 200) {
+  throw new Error(`Expected remotion-direct render to return 200, got ${okRender.statusCode}.`);
+}
+
+const okRenderBody = JSON.parse(okRender.body) as {
+  status?: string;
+  output_path?: string | null;
+  metadata?: { render_engine?: string; render_manifest_path?: string };
+};
+
+if (
+  okRenderBody.status !== "rendered" ||
+  okRenderBody.metadata?.render_engine !== "remotion_direct" ||
+  !okRenderBody.output_path
+) {
+  throw new Error("Expected remotion-direct render to transition the job to rendered with an output path.");
+}
+
+const remotionJobDir = resolve(storageRoot, "jobs", remotionRenderJobId);
+
+if (!existsSync(resolve(remotionJobDir, "render-manifest.remotion-direct.json"))) {
+  throw new Error("Expected remotion-direct render to write render-manifest.remotion-direct.json.");
+}
+
+if (!existsSync(resolve(remotionJobDir, "output", `${remotionRenderJobId}.mp4`))) {
+  throw new Error("Expected remotion-direct render to produce the output MP4 via the injected renderer.");
+}
+
+const queuedRenderJob = {
+  ...sampleJob,
+  job_id: "remotion-direct-queued-001",
+  output: { ...(sampleJob.output as Record<string, unknown>), filename: "remotion-direct-queued-001.mp4" }
+};
+const queuedRenderResponse = await server.inject({ method: "POST", url: "/jobs/render", payload: queuedRenderJob });
+
+if (queuedRenderResponse.statusCode !== 202) {
+  throw new Error(`Expected queued remotion render job to queue, got ${queuedRenderResponse.statusCode}.`);
+}
+
+process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+const conflictRender = await server.inject({
+  method: "POST",
+  url: "/jobs/remotion-direct-queued-001/render/remotion-direct"
+});
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
+
+if (conflictRender.statusCode !== 409) {
+  throw new Error(`Expected remotion-direct render on a queued job to return 409, got ${conflictRender.statusCode}.`);
 }
 
 const invalidStorageRoot = mkdtempSync(resolve(tmpdir(), "raiz-invalid-test-"));

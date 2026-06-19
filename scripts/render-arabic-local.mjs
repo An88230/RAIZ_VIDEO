@@ -173,9 +173,13 @@ function main() {
   const outDir = resolve(repoRoot, args.out || `storage/renders/${jobId}`);
   mkdirSync(outDir, { recursive: true });
 
+  const outputFilename =
+    typeof job.output?.filename === "string" && /\.mp4$/.test(job.output.filename)
+      ? job.output.filename
+      : `${jobId}.mp4`;
   const voiceAiff = resolve(outDir, "voice.aiff");
   const rawVideo = resolve(outDir, "raw.mp4");
-  const finalVideo = resolve(outDir, `${jobId}.mp4`);
+  const finalVideo = resolve(outDir, outputFilename);
   const propsPath = resolve(outDir, "remotion-props.json");
   const srtPath = resolve(outDir, "captions.srt");
   const assPath = resolve(outDir, "captions.ass");

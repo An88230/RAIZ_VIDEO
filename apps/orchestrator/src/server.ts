@@ -93,6 +93,14 @@ import {
   JobUpstreamRequestArtifactError,
   JobUpstreamRequestStateError
 } from "./shortVideoMakerUpstreamRequest.js";
+import {
+  createScriptRemotionRenderer,
+  JobRemotionDirectRenderError,
+  JobRemotionDirectRenderPreflightError,
+  JobRemotionDirectRenderStateError,
+  renderJobWithRemotionDirect,
+  type RemotionRenderer
+} from "./remotionDirectRender.js";
 import { InvalidStatusTransitionError, isLocalJobStatus } from "./statusTransitions.js";
 
 export interface CreateServerOptions {
@@ -100,10 +108,12 @@ export interface CreateServerOptions {
   storageRoot?: string;
   shortVideoMakerVendorPath?: string;
   shortVideoMakerHttpClient?: HttpClient;
+  remotionRenderer?: RemotionRenderer;
 }
 
 const renderAdapters = [shortVideoMakerAdapter];
 const realHttpClient = createFetchHttpClient();
+const defaultRemotionRenderer = createScriptRemotionRenderer();
 
 const internalMockHttpClient: HttpClient = {
   async post(_url, _body) {
@@ -346,6 +356,52 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
       if (error instanceof JobMockRenderStateError || error instanceof JobMockRenderPreflightError) {
         return reply.code(409).send({
           status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Params: { id: string } }>("/jobs/:id/render/remotion-direct", async (request, reply) => {
+    try {
+      return await renderJobWithRemotionDirect(
+        request.params.id,
+        options.remotionRenderer ?? defaultRemotionRenderer,
+        { storageRoot: options.storageRoot }
+      );
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      if (error instanceof RealRenderExecutionDisabledError) {
+        return reply.code(403).send({
+          status: "blocked",
+          job_id: request.params.id,
+          guard: error.guard
+        });
+      }
+
+      if (
+        error instanceof JobRemotionDirectRenderStateError ||
+        error instanceof JobRemotionDirectRenderPreflightError
+      ) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      if (error instanceof JobRemotionDirectRenderError) {
+        return reply.code(500).send({
+          status: "render_failed",
           job_id: request.params.id,
           error: error.message
         });
