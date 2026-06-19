@@ -44,6 +44,7 @@ RAIZ owns the job schema, orchestrator, adapter contracts, Arabic RTL rules, sta
 
 ```text
 apps/orchestrator              Fastify API skeleton with local job persistence
+apps/render-remotion           Remotion-direct Arabic RTL render app (1080x1920)
 packages/job-schema            RAIZ Job validation package
 packages/render-adapters       Generic adapter contract and phase 1 stub
 packages/remotion-templates    Arabic RTL template placeholder and rules
@@ -52,6 +53,38 @@ docs                           Implementation and local run notes
 samples                        Valid sample jobs
 vendor                         Reference-only upstream repositories
 ```
+
+## Local Arabic Render (Remotion-direct)
+
+RAIZ renders real Arabic 9:16 video locally with the chosen v1 engine path:
+**Remotion-direct + external/local Arabic voice-over + FFmpeg mux**. Captions are
+rendered inside Remotion (Chromium shapes Arabic RTL correctly) and also exported
+as `.srt` and `.ass` sidecars.
+
+```bash
+npm install
+npm run raiz:render-arabic                      # renders the sample Arabic job
+npm run raiz:render-arabic -- --job=samples/valid-arabic-9x16-job.json --out=storage/renders/demo
+```
+
+The driver ([scripts/render-arabic-local.mjs](scripts/render-arabic-local.mjs)):
+
+1. Resolves the Arabic voice-over: the job's `voice.file_path` when `voice.type` is
+   `external_file` and the file exists, otherwise a local macOS `say -v Majed` voice.
+2. Measures the voice-over duration with `ffprobe`.
+3. Builds timed caption cues and writes `captions.srt` + `captions.ass`.
+4. Renders the `raiz-dark-hook-01` Remotion composition (1080x1920, RTL Arabic,
+   IBM Plex Sans Arabic) sized to the voice-over.
+5. Muxes the voice-over into the silent Remotion output with FFmpeg.
+6. Verifies the final MP4 is 1080x1920 with an audio track.
+
+Output lands in `storage/renders/{job_id}/{job_id}.mp4` alongside `raw.mp4`,
+`voice.aiff`, `captions.srt`, and `captions.ass`.
+
+Requirements: Node 20+, FFmpeg on `PATH`, and (for the local fallback voice) macOS
+`say`. The first render downloads a headless Chromium for Remotion. Remotion
+composition ids allow only `a-z A-Z 0-9 -`, so RAIZ `template_id` underscores are
+mapped to hyphens (`raiz_dark_hook_01` -> `raiz-dark-hook-01`).
 
 ## Phase 21 Commands
 

@@ -1,0 +1,20 @@
+{
+  "name": "@raiz/render-remotion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render:sample": "remotion render src/index.ts raiz_dark_hook_01 out/sample.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.286",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "remotion": "^4.0.286"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0"
+  }
+}

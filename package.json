@@ -12,7 +12,8 @@
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "dev:orchestrator": "npm --workspace @raiz/orchestrator run dev",
-    "raiz:local-pipeline": "bash scripts/run-local-pipeline.sh"
+    "raiz:local-pipeline": "bash scripts/run-local-pipeline.sh",
+    "raiz:render-arabic": "node scripts/render-arabic-local.mjs"
   },
   "engines": {
     "node": ">=20"
