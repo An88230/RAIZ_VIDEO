@@ -1,0 +1,51 @@
+{
+  "job_id": "creative-arabic-lexicon-001",
+  "project": "معجم الانتباه",
+  "objective": "تحويل فكرة من Creative OS إلى فيديو عربي قصير يشرح كيف تتحول الكلمات اليومية إلى ضغط نفسي.",
+  "tone": "هادئ، حاد، تأملي",
+  "platform": "youtube_shorts",
+  "language": "ar",
+  "direction": "rtl",
+  "visual_code": {
+    "palette": ["أسود دافئ", "أبيض حاد", "أخضر خافت"],
+    "typography": "Arabic RTL, bold hook, clean captions",
+    "pacing": "slow hook, tighter middle, clean final pause",
+    "lighting": "low-key contrast",
+    "composition": "centered text over dark motion",
+    "broll_style": "minimal abstract human routine",
+    "motifs": ["دفتر مفتوح", "هاتف مضاء", "ظل طويل"]
+  },
+  "template_intent": {
+    "engine": "remotion_direct",
+    "template_id": "raiz_dark_hook_01",
+    "style_preset": "dark_hook_reflection",
+    "caption_position": "bottom",
+    "composition_goal": "Make the first line feel like a private realization, then let captions carry the argument."
+  },
+  "beats": [
+    {
+      "text": "أحيانًا الكلمة التي تستخدمها لتشرح نفسك... تكون هي نفسها القفص.",
+      "visual_intent": "Open on a dark field with one centered sentence and slow breathing motion.",
+      "broll_search_terms": ["dark desk notebook", "phone light at night"]
+    },
+    {
+      "text": "تقول: لازم أكون منتج. ثم تتحول كلمة لازم إلى مدير صغير داخل رأسك.",
+      "visual_intent": "Show pressure through repeated visual rhythm, not literal productivity imagery.",
+      "broll_search_terms": ["night work desk", "typing hands shadow"]
+    },
+    {
+      "text": "RAIZ لا يبدأ من الفيديو. يبدأ من المعجم الذي يتحكم في إحساسك بالعالم.",
+      "visual_intent": "End with a quieter frame and a sense of naming the hidden pattern.",
+      "broll_search_terms": ["open book close up", "abstract dark motion"]
+    }
+  ],
+  "voice": {
+    "type": "edge_tts",
+    "provider": "edge",
+    "voice_name": "ar-SA-HamedNeural"
+  },
+  "publish": {
+    "description": "فيديو قصير من Creative OS إلى RAIZ_VIDEO عن اللغة، الانتباه، والضغط اليومي.",
+    "tags": ["RAIZ", "Arabic", "creative-os", "attention"]
+  }
+}
