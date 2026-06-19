@@ -14,12 +14,14 @@ import {
   type PersistenceOptions,
   updateJobStatus
 } from "./persistence.js";
+import type { OutputManifestCheck, ShortVideoMakerOutputManifest } from "./shortVideoMakerOutputIngestion.js";
 
 export { RealRenderExecutionDisabledError };
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(moduleDir, "../../..");
 const renderScriptPath = resolve(repoRoot, "scripts/render-arabic-local.mjs");
+const DEFAULT_RENDER_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface RemotionRenderInput {
   jobId: string;
@@ -74,11 +76,13 @@ export function createScriptRemotionRenderer(): RemotionRenderer {
   return {
     async render(input) {
       const outputPath = resolve(input.outputDir, input.outputFilename);
-      const exitCode = await runNode(
+      const timeoutMs = getRenderTimeoutMs();
+      const renderResult = await runNode(
         [renderScriptPath, `--job=${input.jobPath}`, `--out=${input.outputDir}`],
-        repoRoot
+        repoRoot,
+        timeoutMs
       );
-      const ok = exitCode === 0 && (await pathExists(outputPath));
+      const ok = renderResult.exitCode === 0 && !renderResult.timedOut && (await pathExists(outputPath));
 
       return {
         ok,
@@ -87,9 +91,7 @@ export function createScriptRemotionRenderer(): RemotionRenderer {
         voicePath: resolve(input.outputDir, "voice.aiff"),
         captionsSrtPath: resolve(input.outputDir, "captions.srt"),
         captionsAssPath: resolve(input.outputDir, "captions.ass"),
-        message: ok
-          ? "Remotion-direct render completed."
-          : `Render driver exited with code ${exitCode} or produced no output file.`
+        message: buildRenderDriverMessage(ok, renderResult, timeoutMs)
       };
     }
   };
@@ -179,7 +181,7 @@ export async function renderJobWithRemotionDirect(
   }
 
   const completedAt = new Date().toISOString();
-  const manifestPath = resolve(paths.jobDir, "render-manifest.remotion-direct.json");
+  const manifestPath = paths.remotionRenderManifestPath;
   const manifest = {
     job_id: jobId,
     engine: "remotion_direct",
@@ -195,6 +197,27 @@ export async function renderJobWithRemotionDirect(
     created_at: completedAt
   };
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const outputManifestChecks: OutputManifestCheck[] = [
+    {
+      name: "remotion_direct_output_file_exists",
+      passed: true,
+      severity: "error",
+      message: "Remotion-direct output file exists."
+    }
+  ];
+  const outputManifest: ShortVideoMakerOutputManifest = {
+    job_id: jobId,
+    adapter: "remotion_direct",
+    status: "ingested",
+    source_response_path: manifestPath,
+    output_path: result.outputPath,
+    final_video_path: result.outputPath,
+    checks: outputManifestChecks,
+    warnings: [],
+    errors: [],
+    created_at: completedAt
+  };
+  await writeFile(paths.outputManifestPath, `${JSON.stringify(outputManifest, null, 2)}\n`);
 
   const finalStatus = await updateJobStatus(jobId, "rendered", {
     storageRoot: options.storageRoot,
@@ -203,7 +226,9 @@ export async function renderJobWithRemotionDirect(
     metadata: {
       ...startedMetadata,
       render_completed_at: completedAt,
-      render_manifest_path: manifestPath
+      render_manifest_path: manifestPath,
+      output_manifest_path: paths.outputManifestPath,
+      final_video_path: result.outputPath
     }
   });
   await appendJobEvent(
@@ -212,7 +237,8 @@ export async function renderJobWithRemotionDirect(
       type: "job.remotion_direct_render_completed",
       engine: "remotion_direct",
       output_path: result.outputPath,
-      manifest_path: manifestPath
+      manifest_path: manifestPath,
+      output_manifest_path: paths.outputManifestPath
     },
     options
   );
@@ -220,12 +246,71 @@ export async function renderJobWithRemotionDirect(
   return finalStatus;
 }
 
-function runNode(args: string[], cwd: string): Promise<number> {
+interface RenderDriverResult {
+  exitCode: number;
+  timedOut: boolean;
+}
+
+function runNode(args: string[], cwd: string, timeoutMs: number): Promise<RenderDriverResult> {
   return new Promise((resolveCode, rejectError) => {
     const child = spawn(process.execPath, args, { stdio: "inherit", cwd });
-    child.on("error", rejectError);
-    child.on("close", (code) => resolveCode(code ?? 1));
+    let settled = false;
+    let timedOut = false;
+    let killTimer: NodeJS.Timeout | null = null;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => child.kill("SIGKILL"), 5000);
+    }, timeoutMs);
+
+    child.on("error", (error) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timer);
+      if (killTimer) {
+        clearTimeout(killTimer);
+      }
+      rejectError(error);
+    });
+    child.on("close", (code) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timer);
+      if (killTimer) {
+        clearTimeout(killTimer);
+      }
+      resolveCode({ exitCode: code ?? 1, timedOut });
+    });
   });
+}
+
+function getRenderTimeoutMs(): number {
+  const rawValue = process.env.RAIZ_REMOTION_RENDER_TIMEOUT_MS;
+
+  if (rawValue === undefined || rawValue.trim() === "") {
+    return DEFAULT_RENDER_TIMEOUT_MS;
+  }
+
+  const timeoutMs = Number.parseInt(rawValue, 10);
+  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_RENDER_TIMEOUT_MS;
+}
+
+function buildRenderDriverMessage(ok: boolean, result: RenderDriverResult, timeoutMs: number): string {
+  if (ok) {
+    return "Remotion-direct render completed.";
+  }
+
+  if (result.timedOut) {
+    return `Remotion-direct render timed out after ${timeoutMs}ms.`;
+  }
+
+  return `Render driver exited with code ${result.exitCode} or produced no output file.`;
 }
 
 async function pathExists(path: string): Promise<boolean> {

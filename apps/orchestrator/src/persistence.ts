@@ -49,6 +49,7 @@ export interface JobPaths {
   statusPath: string;
   eventsPath: string;
   renderPlanPath: string;
+  remotionRenderManifestPath: string;
   outputDir: string;
   preflightReportPath: string;
   shortVideoMakerAdapterHealthPath: string;
@@ -399,6 +400,7 @@ export function getJobPaths(jobId: string, options: PersistenceOptions = {}): Jo
     statusPath: resolve(jobDir, "status.json"),
     eventsPath: resolve(jobDir, "events.ndjson"),
     renderPlanPath: resolve(jobDir, "render-plan.json"),
+    remotionRenderManifestPath: resolve(jobDir, "render-manifest.remotion-direct.json"),
     outputDir: resolve(jobDir, "output"),
     preflightReportPath: resolve(jobDir, "preflight-report.json"),
     shortVideoMakerAdapterHealthPath: resolve(jobDir, "adapter-health.short-video-maker.json"),

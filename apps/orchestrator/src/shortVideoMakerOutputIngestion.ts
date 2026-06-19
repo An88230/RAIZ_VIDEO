@@ -21,7 +21,7 @@ export interface OutputManifestCheck {
 
 export interface ShortVideoMakerOutputManifest {
   job_id: string;
-  adapter: "short_video_maker";
+  adapter: "short_video_maker" | "remotion_direct";
   status: OutputManifestStatus;
   source_response_path: string;
   output_path: string | null;

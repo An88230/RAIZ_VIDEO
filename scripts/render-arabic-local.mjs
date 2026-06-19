@@ -303,16 +303,18 @@ function main() {
     ...(brollSrc ? { brollSrc, brollDurationInSeconds: brollDurationSeconds } : {})
   };
   writeFileSync(propsPath, JSON.stringify(props, null, 2), "utf8");
-  run(
-    "Remotion render",
-    "npx",
-    ["remotion", "render", "src/index.ts", compositionId, rawVideo, `--props=${propsPath}`],
-    { cwd: remotionDir }
-  );
-
-  // The b-roll copy is only needed during the Remotion render; remove it after.
-  if (publicBrollPath && existsSync(publicBrollPath)) {
-    rmSync(publicBrollPath, { force: true });
+  try {
+    run(
+      "Remotion render",
+      "npx",
+      ["remotion", "render", "src/index.ts", compositionId, rawVideo, `--props=${propsPath}`],
+      { cwd: remotionDir }
+    );
+  } finally {
+    // The b-roll copy is only needed during the Remotion render.
+    if (publicBrollPath && existsSync(publicBrollPath)) {
+      rmSync(publicBrollPath, { force: true });
+    }
   }
 
   // 5. Mux VO into the silent render.

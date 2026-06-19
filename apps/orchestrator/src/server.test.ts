@@ -20,6 +20,7 @@ const managedEnvKeys = [
   "RAIZ_SHORT_VIDEO_MAKER_RENDER_PATH",
   "RAIZ_SHORT_VIDEO_MAKER_TIMEOUT_MS",
   "RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH",
+  "RAIZ_REMOTION_RENDER_TIMEOUT_MS",
   "RAIZ_STORAGE_DIR"
 ];
 const originalEnv = snapshotEnv(managedEnvKeys);
@@ -214,6 +215,7 @@ interface ArtifactInventoryBody {
     has_job?: boolean;
     has_status?: boolean;
     has_render_plan?: boolean;
+    has_remotion_render_manifest?: boolean;
     has_preflight_report?: boolean;
     has_adapter_health?: boolean;
     has_short_video_maker_payload?: boolean;
@@ -3673,7 +3675,7 @@ if (okRender.statusCode !== 200) {
 const okRenderBody = JSON.parse(okRender.body) as {
   status?: string;
   output_path?: string | null;
-  metadata?: { render_engine?: string; render_manifest_path?: string };
+  metadata?: { render_engine?: string; render_manifest_path?: string; output_manifest_path?: string };
 };
 
 if (
@@ -3685,13 +3687,72 @@ if (
 }
 
 const remotionJobDir = resolve(storageRoot, "jobs", remotionRenderJobId);
+const remotionOutputManifestPath = resolve(remotionJobDir, "output-manifest.json");
+const remotionRenderManifestPath = resolve(remotionJobDir, "render-manifest.remotion-direct.json");
 
-if (!existsSync(resolve(remotionJobDir, "render-manifest.remotion-direct.json"))) {
+if (!existsSync(remotionRenderManifestPath)) {
   throw new Error("Expected remotion-direct render to write render-manifest.remotion-direct.json.");
+}
+
+if (!existsSync(remotionOutputManifestPath) || okRenderBody.metadata?.output_manifest_path !== remotionOutputManifestPath) {
+  throw new Error("Expected remotion-direct render to write output-manifest.json for the review pipeline.");
+}
+
+const remotionOutputManifest = JSON.parse(readFileSync(remotionOutputManifestPath, "utf8")) as {
+  adapter?: string;
+  status?: string;
+  output_path?: string | null;
+  final_video_path?: string | null;
+  warnings?: string[];
+  errors?: string[];
+};
+
+if (
+  remotionOutputManifest.adapter !== "remotion_direct" ||
+  remotionOutputManifest.status !== "ingested" ||
+  remotionOutputManifest.output_path !== okRenderBody.output_path ||
+  remotionOutputManifest.final_video_path !== okRenderBody.output_path ||
+  !Array.isArray(remotionOutputManifest.warnings) ||
+  !Array.isArray(remotionOutputManifest.errors)
+) {
+  throw new Error("Expected remotion-direct output manifest to be compatible with the review package pipeline.");
 }
 
 if (!existsSync(resolve(remotionJobDir, "output", `${remotionRenderJobId}.mp4`))) {
   throw new Error("Expected remotion-direct render to produce the output MP4 via the injected renderer.");
+}
+
+const remotionReviewPackageResponse = await server.inject({
+  method: "POST",
+  url: `/jobs/${remotionRenderJobId}/review-package`
+});
+
+if (remotionReviewPackageResponse.statusCode !== 200) {
+  throw new Error(
+    `Expected review package creation to work after remotion-direct render, got ${remotionReviewPackageResponse.statusCode}.`
+  );
+}
+
+const remotionArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${remotionRenderJobId}/artifacts`
+});
+const remotionArtifacts = JSON.parse(remotionArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  remotionArtifacts.summary?.has_output_manifest !== true ||
+  remotionArtifacts.summary.has_remotion_render_manifest !== true ||
+  !remotionArtifacts.artifacts?.some(
+    (artifact) => artifact.name === "output-manifest.json" && artifact.type === "output_manifest" && artifact.exists
+  ) ||
+  !remotionArtifacts.artifacts.some(
+    (artifact) =>
+      artifact.name === "render-manifest.remotion-direct.json" &&
+      artifact.type === "remotion_render_manifest" &&
+      artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect remotion output and render manifests.");
 }
 
 const queuedRenderJob = {

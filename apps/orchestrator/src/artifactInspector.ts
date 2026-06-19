@@ -8,6 +8,7 @@ export type JobArtifactType =
   | "job_status"
   | "event_log"
   | "render_plan"
+  | "remotion_render_manifest"
   | "preflight_report"
   | "adapter_health"
   | "adapter_payload"
@@ -48,6 +49,7 @@ export interface JobArtifactsInventory {
     has_job: boolean;
     has_status: boolean;
     has_render_plan: boolean;
+    has_remotion_render_manifest: boolean;
     has_preflight_report: boolean;
     has_adapter_health: boolean;
     has_short_video_maker_payload: boolean;
@@ -87,6 +89,7 @@ export async function inspectJobArtifacts(
     inspectArtifact("status.json", "job_status", paths.statusPath),
     inspectArtifact("events.ndjson", "event_log", paths.eventsPath),
     inspectArtifact("render-plan.json", "render_plan", paths.renderPlanPath),
+    inspectArtifact("render-manifest.remotion-direct.json", "remotion_render_manifest", paths.remotionRenderManifestPath),
     inspectArtifact("preflight-report.json", "preflight_report", paths.preflightReportPath),
     inspectArtifact("adapter-health.short-video-maker.json", "adapter_health", paths.shortVideoMakerAdapterHealthPath),
     inspectArtifact("short-video-maker-payload.json", "adapter_payload", paths.shortVideoMakerPayloadPath),
@@ -136,6 +139,7 @@ export async function inspectJobArtifacts(
       has_job: artifactExists(artifacts, "job.json"),
       has_status: artifactExists(artifacts, "status.json"),
       has_render_plan: artifactExists(artifacts, "render-plan.json"),
+      has_remotion_render_manifest: artifactExists(artifacts, "render-manifest.remotion-direct.json"),
       has_preflight_report: artifactExists(artifacts, "preflight-report.json"),
       has_adapter_health: artifactExists(artifacts, "adapter-health.short-video-maker.json"),
       has_short_video_maker_payload: artifactExists(artifacts, "short-video-maker-payload.json"),
