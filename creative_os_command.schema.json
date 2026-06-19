@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nabil88.art/schemas/creative_os_command.schema.json",
+  "title": "Creative OS Local Agent Command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "command_id",
+    "source",
+    "requested_action",
+    "natural_language_command",
+    "project_context",
+    "payload",
+    "safety",
+    "created_at"
+  ],
+  "properties": {
+    "command_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["creative_os_ui", "voice_input", "typed_input", "local_agent_test"]
+    },
+    "requested_action": {
+      "type": "string",
+      "enum": [
+        "create_creative_brief",
+        "convert_brief_to_job",
+        "generate_gemini_voice",
+        "run_local_render",
+        "inspect_job_artifacts",
+        "create_review_package",
+        "git_status",
+        "git_log",
+        "open_project_folder",
+        "open_render_output"
+      ]
+    },
+    "natural_language_command": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workspace", "project"],
+      "properties": {
+        "workspace": {
+          "type": "string",
+          "const": "RAIZ_VIDEO"
+        },
+        "project": {
+          "type": "string",
+          "minLength": 1
+        },
+        "job_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "language": {
+          "type": "string",
+          "enum": ["ar", "en"]
+        },
+        "direction": {
+          "type": "string",
+          "enum": ["rtl", "ltr"]
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "project": {
+          "type": "string",
+          "minLength": 1
+        },
+        "concept": {
+          "type": "string",
+          "minLength": 1
+        },
+        "template_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "voice_provider": {
+          "type": "string",
+          "enum": ["gemini_tts", "local_file", "none"]
+        },
+        "output": {
+          "type": "string",
+          "enum": ["local_mp4", "local_artifacts"]
+        },
+        "publish": {
+          "type": "boolean"
+        },
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600
+        },
+        "creative_brief": {
+          "type": "object"
+        },
+        "job_id": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requires_confirmation",
+        "allow_arbitrary_shell",
+        "allowed_paths",
+        "secrets_in_payload"
+      ],
+      "properties": {
+        "requires_confirmation": {
+          "type": "boolean"
+        },
+        "allow_arbitrary_shell": {
+          "type": "boolean",
+          "const": false
+        },
+        "allowed_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "secrets_in_payload": {
+          "type": "boolean",
+          "const": false
+        },
+        "audit_log_required": {
+          "type": "boolean",
+          "const": true
+        },
+        "network_allowed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

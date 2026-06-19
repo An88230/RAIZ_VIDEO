@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nabil88.art/schemas/creative_os_action_result.schema.json",
+  "title": "Creative OS Local Agent Action Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "command_id",
+    "action_id",
+    "status",
+    "summary",
+    "artifacts",
+    "logs",
+    "next_recommended_action",
+    "errors",
+    "completed_at"
+  ],
+  "properties": {
+    "command_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "action_id": {
+      "type": "string",
+      "enum": [
+        "create_creative_brief",
+        "convert_brief_to_job",
+        "generate_gemini_voice",
+        "run_local_render",
+        "inspect_job_artifacts",
+        "create_review_package",
+        "git_status",
+        "git_log",
+        "open_project_folder",
+        "open_render_output"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["succeeded", "failed", "rejected", "requires_confirmation", "skipped"]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "type"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "exists": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "logs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_recommended_action": {
+      "type": ["string", "null"],
+      "enum": [
+        null,
+        "create_creative_brief",
+        "convert_brief_to_job",
+        "generate_gemini_voice",
+        "run_local_render",
+        "inspect_job_artifacts",
+        "create_review_package",
+        "git_status",
+        "git_log",
+        "open_project_folder",
+        "open_render_output"
+      ]
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "details": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
