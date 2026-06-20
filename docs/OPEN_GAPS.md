@@ -23,6 +23,7 @@ inside the next phase · **Low** = polish / hardening backlog.
 | GAP-06 | Low | `PATCH /jobs/:id/status` allows manual state hops past guarded flows | Open |
 | GAP-07 | Low | Job schema has no upper bounds on `broll_count` / `search_terms` | Open |
 | GAP-08 | Low | Brief→job bridge defaults to an unimplemented `edge_tts` voice | Open |
+| GAP-09 | Medium | Gemini TTS native audio (official render voice) is contract-only and unwired | In progress |
 
 ---
 
@@ -134,6 +135,38 @@ inside the next phase · **Low** = polish / hardening backlog.
 - **Suggested fix:** default to a voice the render actually supports, or document
   the fallback explicitly on the bridge.
 
+## GAP-09 (Medium) — Gemini TTS native audio is the official render voice but unwired
+
+- **Where:** [GEMINI_TTS_VOICE_LAYER.md](GEMINI_TTS_VOICE_LAYER.md) defines the
+  Gemini TTS voice layer as contract-only (Phase 37, "does not implement Gemini
+  calls"). The job schema `voice.type` enum
+  ([raiz-job.schema.json](../raiz-job.schema.json)) is
+  `["external_file", "edge_tts", "elevenlabs", "azure", "none"]` — there is no
+  `gemini` value. No Gemini code exists under `apps/` or `scripts/` (only a
+  `voice_provider: "gemini_tts"` field in a Creative OS command sample).
+- **In-progress source:** the **Gemini TTS native audio** prototype was being
+  built (2026-06-19) inside the external Creative OS concept repo
+  `https://github.com/An88230/visual-intelligence-system/tree/main/07-creative-os`
+  — the same `visual-intelligence-system/07-creative-os` that
+  [CREATIVE_OS_BRIDGE.md](CREATIVE_OS_BRIDGE.md) connects to. It is not yet
+  integrated into RAIZ_VIDEO.
+- **Why it is undocumented (here):** the voice-layer contract exists, but RAIZ has
+  no recorded link between the "official voice layer" and the actual render path,
+  the schema cannot even express a Gemini/native-audio voice, and the native-audio
+  work is tracked nowhere in this repo.
+- **Impact:** the intended Arabic production voice does not exist in RAIZ yet, so
+  renders fall back to macOS `say` (compounds GAP-04 and GAP-08). The official
+  voice layer stays aspirational until it is wired and testable.
+- **Suggested fix:** per GEMINI_TTS_VOICE_LAYER.md, have the future Local Agent
+  generate `storage/jobs/{job_id}/assets/voice/voice.wav` plus a manifest, then let
+  the render consume it as a local asset — either via `voice.type: "external_file"`
+  or by adding a `gemini` voice type to the schema. Build it as a guarded, testable
+  adapter using the Pexels-fetcher pattern (injectable client, `GEMINI_API_KEY`
+  from local `.env`, `npm test` off the network), and honor the no-fake-voice /
+  no-silent-provider fallback rule. Use the native-audio prototype above as the
+  design input.
+- **Status:** In progress (external prototype); not integrated in RAIZ.
+
 ---
 
 ## Already tracked elsewhere (intentionally not repeated here)
@@ -154,4 +187,7 @@ These are real, but already recorded in
 1. GAP-01 (close the exposure before any UI or agent work).
 2. GAP-02 (restore the Pexels seam — it disables a feature marked stable).
 3. GAP-03, GAP-04 (CI gate + truthful preflight) alongside Phase 35.
-4. GAP-05 through GAP-08 (hardening backlog).
+4. GAP-09 (production Gemini native-audio voice layer) — the real fix behind
+   GAP-04 and GAP-08; sequence it with the "production voice layer" step in
+   PROJECT_STATE.
+5. GAP-05 through GAP-08 (hardening backlog).
