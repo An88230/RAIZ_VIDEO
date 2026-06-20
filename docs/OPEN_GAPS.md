@@ -1,0 +1,157 @@
+# RAIZ Video Factory - Open Gaps Register
+
+Discovered: 2026-06-20 (against `v0.1.34`).
+
+This register lists gaps found during code review that are **not** already
+recorded in [PROJECT_STATE_AND_NEXT_PHASES.md](PROJECT_STATE_AND_NEXT_PHASES.md)
+or other docs. It exists to keep the project truthful: a gap that is known but
+undocumented is a hidden risk.
+
+Source of truth for every reference below is `apps/orchestrator/src`,
+`packages/`, root schemas, `samples/`, and `scripts/` — never `dist/`.
+
+Severity: **High** = fix before building anything on top · **Medium** = fix
+inside the next phase · **Low** = polish / hardening backlog.
+
+| ID | Severity | Gap | Status |
+|----|----------|-----|--------|
+| GAP-01 | High | Orchestrator binds `0.0.0.0` with no authentication | Open |
+| GAP-02 | Medium | Creative OS → Pexels seam is broken (bridge drops `search_terms`) | Open |
+| GAP-03 | Medium | No CI gate (build/test run manually only) | Open |
+| GAP-04 | Medium | Preflight reports `passed` for unimplemented voice providers | Open |
+| GAP-05 | Low | HTTP client has no response size cap and an optional timeout | Open |
+| GAP-06 | Low | `PATCH /jobs/:id/status` allows manual state hops past guarded flows | Open |
+| GAP-07 | Low | Job schema has no upper bounds on `broll_count` / `search_terms` | Open |
+| GAP-08 | Low | Brief→job bridge defaults to an unimplemented `edge_tts` voice | Open |
+
+---
+
+## GAP-01 (High) — Orchestrator binds `0.0.0.0` with no authentication
+
+- **Where:** [apps/orchestrator/src/index.ts](../apps/orchestrator/src/index.ts) →
+  `const host = process.env.HOST ?? "0.0.0.0";`. No auth hook / token check exists
+  anywhere in [apps/orchestrator/src/server.ts](../apps/orchestrator/src/server.ts).
+- **Why it is undocumented:** every doc example uses `127.0.0.1` (START_RAIZ,
+  RUN_LOCAL_PIPELINE, README), but no doc states the actual bind host or the
+  absence of authentication. Docs and code disagree, silently.
+- **Impact:** on any shared network, an unauthenticated client can create jobs
+  (writes to disk), drive the status machine via `PATCH /jobs/:id/status`, read
+  job artifacts and paths (`GET /jobs/:id/artifacts`), and fill storage (DoS). If
+  `RAIZ_ENABLE_REAL_RENDER=true`, guarded real-execution routes are exposed too.
+  This is the executor beneath the (not-yet-built) Local Agent security boundary,
+  so it must be safe on its own.
+- **Suggested fix:** default `HOST` to `127.0.0.1`; require explicit opt-in for
+  `0.0.0.0`. Optionally add a local shared-secret header check. Add a test.
+
+## GAP-02 (Medium) — Creative OS → Pexels seam is broken
+
+- **Where:** [scripts/creative-brief-to-job.mjs](../scripts/creative-brief-to-job.mjs)
+  (the `assets` block) sets `broll_source: "pexels"` when beats carry
+  `broll_search_terms`, but **never writes `assets.search_terms`**. Confirmed in
+  the produced artifact `storage/jobs/creative-arabic-lexicon-001/job.json`
+  (`"assets": { "broll_source": "pexels" }`).
+- **Why it is undocumented:** this is a contradiction *between* two truthful docs.
+  [CREATIVE_OS_BRIDGE.md](CREATIVE_OS_BRIDGE.md) maps `beats[].broll_search_terms`
+  to "editing plan search terms and publish tags" (not `assets.search_terms`),
+  while [README.md](../README.md) states `assets.search_terms` is what drives the
+  Pexels fetch. No doc records that the combination makes the feature unreachable.
+- **Impact:** a brief → job → render flow declares `pexels` but `resolveBrollPlan`
+  finds no `search_terms`, warns "no usable assets.search_terms", and never
+  fetches. The Pexels pipeline marked "stable" in PROJECT_STATE is effectively
+  disabled on the canonical Creative OS pipeline. The bridge test
+  ([scripts/creative-brief-to-job.test.mjs](../scripts/creative-brief-to-job.test.mjs))
+  only asserts `broll_source` and `publish.tags`, so it does not catch this.
+- **Suggested fix:** in `convertCreativeBriefToJob`, write
+  `search_terms: brollSearchTerms` (and a bounded `broll_count`) into `assets`
+  when terms exist; add a bridge-test assertion on `assets.search_terms`.
+
+## GAP-03 (Medium) — No CI gate
+
+- **Where:** no `.github/workflows` (or any CI config) in the repo.
+- **Why it is undocumented:** no doc mentions continuous integration; "workflow"
+  appears only in the n8n sense.
+- **Impact:** the project commits directly to `main`, yet `npm run build` and
+  `npm test` run only manually. A regression can land on the trunk unguarded.
+- **Suggested fix:** add a minimal GitHub Actions workflow running
+  `npm ci && npm run build && npm test` on push and pull request.
+
+## GAP-04 (Medium) — Preflight passes unimplemented voice providers
+
+- **Where:** [apps/orchestrator/src/preflight.ts](../apps/orchestrator/src/preflight.ts)
+  `buildVoiceChecks` — for `edge_tts` / `elevenlabs` / `azure` it only requires a
+  provider and voice name, then reports `passed`.
+- **Why it is undocumented:** README documents these providers as reserved and the
+  render driver warns at render time, but no doc notes that the **preflight
+  readiness gate itself** reports the job ready while the render silently falls
+  back to macOS `say`.
+- **Impact:** the readiness gate is not truthful about the actual narration path,
+  which conflicts with the project's "must stay truthful" rule.
+- **Suggested fix:** add a warning-level preflight check when the requested voice
+  provider is not implemented in local render v1.
+
+## GAP-05 (Low) — HTTP client: no response size cap, optional timeout
+
+- **Where:** [apps/orchestrator/src/httpClient.ts](../apps/orchestrator/src/httpClient.ts)
+  reads `response.text()` with no size limit; the timeout is applied only when
+  `timeoutMs` is provided.
+- **Why it is undocumented:** no doc discusses response limits or client timeouts.
+- **Impact:** a very large or hung upstream response could exhaust memory or block
+  indefinitely. Low risk today (upstream is a configured localhost service), but
+  relevant to orchestrator hardening.
+- **Suggested fix:** cap response bytes and apply a sane default timeout.
+
+## GAP-06 (Low) — `PATCH /jobs/:id/status` allows manual state hops
+
+- **Where:** [apps/orchestrator/src/server.ts](../apps/orchestrator/src/server.ts)
+  PATCH handler + [apps/orchestrator/src/statusTransitions.ts](../apps/orchestrator/src/statusTransitions.ts)
+  (`preparing -> rendering` is a valid transition).
+- **Why it is undocumented:** no doc notes that a client can advance status
+  manually, bypassing the guarded render / real-send paths.
+- **Impact:** acceptable on loopback for manual control, but a real integrity hole
+  if the orchestrator is ever exposed (see GAP-01). A client could move a job to
+  `rendering` without rendering, then ingest output.
+- **Suggested fix:** tie to GAP-01 (loopback + auth); optionally restrict which
+  transitions the public PATCH may perform versus internal transitions.
+
+## GAP-07 (Low) — Schema has no upper bounds on b-roll fields
+
+- **Where:** [raiz-job.schema.json](../raiz-job.schema.json) — `assets.broll_count`
+  has no `maximum`; `assets.search_terms` has no `maxItems`.
+- **Why it is undocumented:** not mentioned anywhere.
+- **Impact:** the Pexels fetcher silently caps the count at 5, so out-of-range
+  values pass validation but behave unexpectedly.
+- **Suggested fix:** add `maximum` to `broll_count` and `maxItems` to
+  `search_terms` (aligned with the fetcher cap).
+
+## GAP-08 (Low) — Bridge defaults to an unimplemented `edge_tts` voice
+
+- **Where:** [scripts/creative-brief-to-job.mjs](../scripts/creative-brief-to-job.mjs)
+  `defaultVoice = { type: "edge_tts", ... }`.
+- **Why it is undocumented:** not mentioned anywhere.
+- **Impact:** every bridge-produced job without an explicit voice defaults to a
+  provider that the render does not implement (compounds GAP-04: it preflights as
+  ready, then renders with `say`).
+- **Suggested fix:** default to a voice the render actually supports, or document
+  the fallback explicitly on the bridge.
+
+---
+
+## Already tracked elsewhere (intentionally not repeated here)
+
+These are real, but already recorded in
+[PROJECT_STATE_AND_NEXT_PHASES.md](PROJECT_STATE_AND_NEXT_PHASES.md):
+
+- Controlled retry transition from `failed` to `preparing`.
+- Atomic `status.json` writes (temp file + rename).
+- Per-job lock or queue to prevent concurrent write collisions.
+- `GET /jobs` listing.
+- Predictable handling of corrupted job status files.
+- Caption readability improvements; Arabic voice layer hardening (Later Direction).
+- No production Local Agent Runner yet.
+
+## Recommended order
+
+1. GAP-01 (close the exposure before any UI or agent work).
+2. GAP-02 (restore the Pexels seam — it disables a feature marked stable).
+3. GAP-03, GAP-04 (CI gate + truthful preflight) alongside Phase 35.
+4. GAP-05 through GAP-08 (hardening backlog).

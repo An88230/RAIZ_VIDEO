@@ -108,6 +108,13 @@ The source of truth is:
 build artifact, but it must not be treated as the design source, reviewed as the
 primary implementation, or edited directly.
 
+## Open Gaps
+
+Gaps found in review that are not covered by the sections above are tracked in
+[OPEN_GAPS.md](OPEN_GAPS.md). It records each gap's location in source, why it was
+undocumented, impact, and a suggested fix. Items already listed under Phase 35
+hardening are intentionally not duplicated there.
+
 ## Do Not Build Yet
 
 Do not build the full UI before Orchestrator hardening.
