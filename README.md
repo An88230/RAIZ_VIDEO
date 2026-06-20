@@ -2,7 +2,7 @@
 
 RAIZ Video Factory is a local-first control layer for Arabic 9:16 short-video production.
 
-Phase 21 is intentionally small:
+Current local-first scope:
 
 - Validate RAIZ Job JSON using `raiz-job.schema.json`.
 - Provide a thin orchestrator API for validation, mock render queueing, and file-backed job status.
@@ -28,6 +28,12 @@ Phase 21 is intentionally small:
 - Submit one guarded real HTTP request when explicitly enabled.
 - Ingest a verified local output path from the upstream response.
 - Create a local output review package without uploading or modifying the video.
+- Register both `short_video_maker` and `remotion_direct` adapters for safe
+  `/jobs/render` queueing.
+- Run real Remotion-direct rendering only through the guarded
+  `/jobs/:id/render/remotion-direct` route.
+- Warn when schema-supported local render fields are reserved or not implemented
+  in local render v1.
 
 ## Vendor Policy
 
@@ -65,12 +71,14 @@ as `.srt` and `.ass` sidecars.
 npm install
 npm run raiz:render-arabic                      # renders the sample Arabic job
 npm run raiz:render-arabic -- --job=samples/valid-arabic-9x16-job.json --out=storage/renders/demo
+npm run raiz:render-arabic -- --job=samples/valid-arabic-9x16-job.json --dry-check
 ```
 
 The driver ([scripts/render-arabic-local.mjs](scripts/render-arabic-local.mjs)):
 
 1. Resolves the Arabic voice-over: the job's `voice.file_path` when `voice.type` is
-   `external_file` and the file exists, otherwise a local macOS `say -v Majed` voice.
+   `external_file` and the file exists, otherwise a local macOS `say -v Majed` voice
+   with an explicit warning.
 2. Measures the voice-over duration with `ffprobe`.
 3. Builds timed caption cues and writes `captions.srt` + `captions.ass`.
 4. Renders the `raiz-dark-hook-01` Remotion composition (1080x1920, RTL Arabic,
@@ -86,6 +94,56 @@ Requirements: Node 20+, FFmpeg on `PATH`, and (for the local fallback voice) mac
 composition ids allow only `a-z A-Z 0-9 -`, so RAIZ `template_id` underscores are
 mapped to hyphens (`raiz_dark_hook_01` -> `raiz-dark-hook-01`).
 
+## Supported in local render v1
+
+The local Remotion-direct driver currently supports:
+
+- Arabic-first 9:16 output at `1080x1920`.
+- `template.template_id` mapped from RAIZ underscore form to Remotion composition
+  id hyphen form, for example `raiz_dark_hook_01` -> `raiz-dark-hook-01`.
+- `hook` as the main centered visual hook.
+- `script` as narration text and timed caption source.
+- `voice.type: "external_file"` when `voice.file_path` exists.
+- macOS fallback narration through `say -v Majed`.
+- Local b-roll only when `assets.broll_source: "local"` and
+  `assets.broll_folder` points to available local clips.
+- Caption sidecar generation: `captions.srt` and `captions.ass`.
+- Burned-in Remotion captions using the current fixed template style.
+- `output.filename` for the final MP4 filename.
+- `--dry-check` / `--dry-voice-check` to print local voice and unsupported-field
+  warnings without running `say`, Remotion, or FFmpeg.
+
+## Reserved / not implemented in local render v1
+
+These fields are accepted by the schema or existing samples, but they are
+reserved or not fully implemented by `scripts/render-arabic-local.mjs` v1. The
+driver prints `[render][warning]` or `[voice][warning]` messages so they do not
+pass silently.
+
+- `voice.type: "edge_tts"`, `"elevenlabs"`, and `"azure"` are schema-supported
+  but not implemented locally in v1. They fall back to macOS `say -v Majed`.
+- `assets.music` is not mixed into the final MP4.
+- `assets.logo` is not composited.
+- `assets.broll_source` values such as `pexels`, `pixabay`, and `google_drive`
+  are reserved for other workflows; local render v1 only consumes local folders.
+- `captions.font` is ignored; the Remotion template uses bundled IBM Plex Sans
+  Arabic.
+- `captions.position` is ignored; the current template uses a fixed caption
+  layout.
+- `captions.burn_in` is not configurable; local Remotion captions are always
+  burned into the visual layer.
+- `captions.enabled=false` is not implemented; captions are still generated from
+  script cues.
+- `captions.format` does not disable Remotion captions; local render v1 writes
+  both SRT and ASS sidecars and renders captions visually.
+- `title` is metadata only in the current Remotion template and is not displayed.
+- `output.drive_folder` is ignored by local render v1; use `--out` or the
+  default `storage/renders/{job_id}` folder.
+- `template.style_preset` and `captions.style_preset` are reserved for future
+  template variants.
+- Non-Arabic `language` or non-RTL `direction` values are schema-valid for the
+  broader RAIZ contract, but local render v1 is Arabic/RTL-first.
+
 ### Running the render through the orchestrator
 
 The same render is wired into the orchestrator as a guarded route:
@@ -98,6 +156,13 @@ curl -X POST http://127.0.0.1:4000/jobs/{job_id}/render/remotion-direct
 
 The output MP4 lands at `storage/jobs/{job_id}/output/{filename}` and the job moves
 to `rendered`.
+
+`POST /jobs/render` is different: it validates and queues a job only. It accepts
+both `template.engine: "short_video_maker"` and `template.engine:
+"remotion_direct"` when their adapters can prepare a safe queued plan, but it
+does not render video and does not call Remotion. Real Remotion execution is
+only available through `POST /jobs/:id/render/remotion-direct`, and only when the
+server is started with `RAIZ_ENABLE_REAL_RENDER=true`.
 
 ### Local b-roll videos
 
@@ -132,7 +197,7 @@ Clips download to `storage/assets/broll/pexels/` (portrait only, cached, never
 overwrites). To use them in a render, point the job's `broll_folder` at that
 subfolder. Without a key the fetch warns and exits without failing.
 
-## Phase 21 Commands
+## Commands
 
 ```bash
 npm install
@@ -141,6 +206,7 @@ npm run build
 npm run dev:orchestrator
 ./scripts/start-raiz.sh
 npm run raiz:local-pipeline
+npm run raiz:render-arabic -- --job=samples/valid-arabic-9x16-job.json --dry-check
 ```
 
 The orchestrator listens on port `4000` by default.
@@ -177,11 +243,20 @@ Current endpoints:
 - `POST /jobs/:id/send-to-short-video-maker`
 - `POST /jobs/:id/ingest-output/short-video-maker`
 - `POST /jobs/:id/review-package`
+- `POST /jobs/:id/manual-review/approve`
+- `POST /jobs/:id/manual-review/reject`
+- `POST /jobs/:id/publish-package`
+- `POST /jobs/:id/youtube-upload-plan`
+- `POST /jobs/:id/google-drive-export-plan`
+- `POST /jobs/:id/n8n-workflow-plan`
 - `GET /jobs/:id/artifacts`
 - `GET /jobs/:id/status`
 - `PATCH /jobs/:id/status`
 
-`POST /jobs/render` validates the payload and returns a queued mock status. It does not render video yet.
+`POST /jobs/render` validates the payload, chooses a registered adapter by
+`job.template.engine`, and returns a queued status. It currently supports safe
+queueing for `short_video_maker` and `remotion_direct`. It does not render video,
+call Remotion, call short-video-maker, upload, or publish.
 
 For each accepted render request, the orchestrator creates:
 
