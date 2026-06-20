@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { resolveLocalRenderSupportPlan, resolveVoicePlan } from "./render-arabic-local.mjs";
+import { resolveBrollPlan, resolveLocalRenderSupportPlan, resolveVoicePlan } from "./render-arabic-local.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const scriptPath = resolve(repoRoot, "scripts/render-arabic-local.mjs");
@@ -94,7 +94,7 @@ try {
       style_preset: "cinematic"
     },
     assets: {
-      broll_source: "pexels",
+      broll_source: "pixabay",
       music: "storage/audio/music.mp3",
       logo: "storage/logo.png"
     },
@@ -113,7 +113,7 @@ try {
 
   for (const expectedWarning of [
     "assets.logo is reserved/unsupported",
-    'assets.broll_source="pexels" is reserved/unsupported',
+    'assets.broll_source="pixabay" is reserved/unsupported',
     "captions.enabled=false is not implemented",
     'captions.format="none" is reserved/unsupported',
     "captions.burn_in=false is not configurable",
@@ -125,6 +125,44 @@ try {
     if (!supportPlan.warnings.some((warning) => warning.includes(expectedWarning))) {
       throw new Error(`Expected render support plan to warn about unsupported field: ${expectedWarning}`);
     }
+  }
+
+  const pexelsPlan = resolveBrollPlan(
+    { assets: { broll_source: "pexels", search_terms: ["dark desk", "night city"], broll_count: 2 } },
+    { repoRoot }
+  );
+
+  if (
+    pexelsPlan.source !== "pexels" ||
+    pexelsPlan.query !== "dark desk" ||
+    pexelsPlan.count !== 2 ||
+    pexelsPlan.shouldFetch !== true ||
+    pexelsPlan.folder !== resolve(repoRoot, "storage/assets/broll/pexels")
+  ) {
+    throw new Error("Expected pexels b-roll plan to fetch the first search term into the pexels folder.");
+  }
+
+  const pexelsNoTerms = resolveBrollPlan({ assets: { broll_source: "pexels" } }, { repoRoot });
+
+  if (
+    pexelsNoTerms.shouldFetch !== false ||
+    !pexelsNoTerms.warnings.some((warning) => warning.includes("no usable assets.search_terms"))
+  ) {
+    throw new Error("Expected pexels without search terms to skip the fetch with a warning.");
+  }
+
+  const localWithTerms = resolveBrollPlan(
+    { assets: { broll_source: "local", broll_folder: "storage/assets/broll", search_terms: ["ignored"] } },
+    { repoRoot }
+  );
+
+  if (
+    localWithTerms.source !== "local" ||
+    localWithTerms.shouldFetch !== false ||
+    localWithTerms.folder !== resolve(repoRoot, "storage/assets/broll") ||
+    !localWithTerms.warnings.some((warning) => warning.includes('ignored unless broll_source is "pexels"'))
+  ) {
+    throw new Error("Expected local b-roll plan to ignore search terms with a warning.");
   }
 } finally {
   rmSync(tempRoot, { force: true, recursive: true });

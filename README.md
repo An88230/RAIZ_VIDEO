@@ -105,8 +105,11 @@ The local Remotion-direct driver currently supports:
 - `script` as narration text and timed caption source.
 - `voice.type: "external_file"` when `voice.file_path` exists.
 - macOS fallback narration through `say -v Majed`.
-- Local b-roll only when `assets.broll_source: "local"` and
-  `assets.broll_folder` points to available local clips.
+- Local b-roll when `assets.broll_source: "local"` and `assets.broll_folder`
+  points to available local clips.
+- Optional Pexels b-roll when `assets.broll_source: "pexels"`: the render
+  auto-fetches portrait clips for `assets.search_terms` (first term in v1, up to
+  `assets.broll_count`) when `PEXELS_API_KEY` is set, then picks the best match.
 - Caption sidecar generation: `captions.srt` and `captions.ass`.
 - Burned-in Remotion captions using the current fixed template style.
 - `output.filename` for the final MP4 filename.
@@ -124,8 +127,10 @@ pass silently.
   but not implemented locally in v1. They fall back to macOS `say -v Majed`.
 - `assets.music` is not mixed into the final MP4.
 - `assets.logo` is not composited.
-- `assets.broll_source` values such as `pexels`, `pixabay`, and `google_drive`
-  are reserved for other workflows; local render v1 only consumes local folders.
+- `assets.broll_source` values `pixabay` and `google_drive` are reserved for
+  other workflows; local render v1 consumes `local` and `pexels` b-roll.
+- `assets.search_terms` only drives fetching when `broll_source: "pexels"`; it is
+  ignored (with a warning) for other sources, and only the first term is used in v1.
 - `captions.font` is ignored; the Remotion template uses bundled IBM Plex Sans
   Arabic.
 - `captions.position` is ignored; the current template uses a fixed caption
@@ -185,8 +190,29 @@ back to a solid dark background. Local b-roll is the brand-first source.
 
 #### Optional: fetch b-roll from Pexels
 
-Pexels is an optional enrichment (not the brand default). It only runs when a key
-is present:
+Pexels is an optional enrichment (not the brand default). It only runs when a
+`PEXELS_API_KEY` is present in `.env`. There are two ways to use it.
+
+**Job-driven (automatic during render).** Declare it on the job and the render
+fetches portrait clips before compositing:
+
+```json
+"assets": {
+  "broll_source": "pexels",
+  "search_terms": ["dark desk notebook", "phone light at night"],
+  "broll_count": 2
+}
+```
+
+The render queries Pexels with the first search term (multi-term blending is
+reserved), downloads up to `broll_count` portrait clips into
+`storage/assets/broll/pexels/` (or the job's `broll_folder` when set), then picks
+the clip closest to `1080x1920`. Without a key — or on any fetch error — it warns
+(`[broll][warning]`) and falls back to cached clips or a solid dark background; it
+never fails the render. Downloads are validated as `video/*`, skipping non-video
+or empty responses.
+
+**Manual (pre-fetch via CLI).** Populate the pool ahead of time:
 
 ```bash
 # put PEXELS_API_KEY=... in .env (gitignored), then:
@@ -194,8 +220,7 @@ npm run raiz:fetch-broll -- --query="dark moody clouds" --count=3
 ```
 
 Clips download to `storage/assets/broll/pexels/` (portrait only, cached, never
-overwrites). To use them in a render, point the job's `broll_folder` at that
-subfolder. Without a key the fetch warns and exits without failing.
+overwrites). Point the job's `broll_folder` at that subfolder to use them.
 
 ## Commands
 

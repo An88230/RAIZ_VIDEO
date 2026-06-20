@@ -25,6 +25,8 @@ import {
 import { basename, dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { fetchPexelsBroll } from "./fetch-pexels-broll.mjs";
+
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const remotionDir = resolve(repoRoot, "apps/render-remotion");
 const FPS = 30;
@@ -133,10 +135,10 @@ export function resolveLocalRenderSupportPlan(job) {
   if (
     typeof assets.broll_source === "string" &&
     assets.broll_source.trim() &&
-    !["local", "none"].includes(assets.broll_source)
+    !["local", "none", "pexels"].includes(assets.broll_source)
   ) {
     warnings.push(
-      `assets.broll_source="${assets.broll_source}" is reserved/unsupported in render-arabic-local v1; only local b-roll folders are used.`
+      `assets.broll_source="${assets.broll_source}" is reserved/unsupported in render-arabic-local v1; only local and pexels b-roll are wired.`
     );
   }
 
@@ -205,9 +207,53 @@ export function resolveLocalRenderSupportPlan(job) {
   };
 }
 
+/**
+ * Pure b-roll background plan (no network). Decides whether the render uses a
+ * local folder or an optional Pexels fetch. v1 fetches with the FIRST search
+ * term (multi-term blending is reserved). search_terms only apply to pexels.
+ */
+export function resolveBrollPlan(job, options = {}) {
+  const root = options.repoRoot ?? repoRoot;
+  const assets = job.assets ?? {};
+  const source =
+    typeof assets.broll_source === "string" && assets.broll_source.trim() ? assets.broll_source.trim() : null;
+  const terms = Array.isArray(assets.search_terms)
+    ? assets.search_terms.filter((term) => typeof term === "string" && term.trim()).map((term) => term.trim())
+    : [];
+  const count = Number.isInteger(assets.broll_count) && assets.broll_count > 0 ? assets.broll_count : 3;
+  const warnings = [];
+
+  if (source === "pexels") {
+    const folder = resolve(root, (assets.broll_folder && assets.broll_folder.trim()) || "storage/assets/broll/pexels");
+    const query = terms[0] ?? null;
+    if (!query) {
+      warnings.push(
+        'broll_source="pexels" has no usable assets.search_terms; skipping fetch and using cached clips or a solid background.'
+      );
+    }
+    return { source, folder, query, count, shouldFetch: Boolean(query), warnings };
+  }
+
+  if (terms.length > 0) {
+    warnings.push('assets.search_terms is ignored unless broll_source is "pexels".');
+  }
+
+  if (source === "local" && assets.broll_folder && assets.broll_folder.trim()) {
+    return { source, folder: resolve(root, assets.broll_folder.trim()), query: null, count: 0, shouldFetch: false, warnings };
+  }
+
+  return { source, folder: null, query: null, count: 0, shouldFetch: false, warnings };
+}
+
 function logRenderSupportWarnings(warnings) {
   for (const warning of warnings) {
     console.warn(`[render][warning] ${warning}`);
+  }
+}
+
+function logBrollWarnings(warnings) {
+  for (const warning of warnings) {
+    console.warn(`[broll][warning] ${warning}`);
   }
 }
 
@@ -378,7 +424,7 @@ function buildAss(cues) {
   return `${header}\n${events}\n`;
 }
 
-function main() {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   const jobPath = resolve(repoRoot, args.job);
   if (!existsSync(jobPath)) {
@@ -415,12 +461,15 @@ function main() {
 
   const voicePlan = resolveVoicePlan(job);
   const renderSupportPlan = resolveLocalRenderSupportPlan(job);
+  const brollPlan = resolveBrollPlan(job);
   logVoiceWarnings(voicePlan.warnings);
   logRenderSupportWarnings(renderSupportPlan.warnings);
+  logBrollWarnings(brollPlan.warnings);
 
   if (args.dryVoiceCheck) {
     console.log(`[voice] dry check source: ${voicePlan.source}`);
     console.log(`[render] dry check warnings: ${renderSupportPlan.warnings.length}`);
+    console.log(`[broll] dry check plan: source=${brollPlan.source ?? "none"} fetch=${brollPlan.shouldFetch}`);
     return;
   }
 
@@ -443,14 +492,41 @@ function main() {
   writeFileSync(assPath, buildAss(allCues), "utf8");
   console.log(`[captions] wrote ${allCues.length} cues -> captions.srt, captions.ass`);
 
-  // 3.5 Local b-roll background (optional). Brand-first: local folder only here.
+  // 3.5 Background b-roll (optional): a local folder, or an optional Pexels fetch
+  // driven by assets.search_terms. Both are graceful — any miss falls back to a
+  // solid dark background. The network fetch only runs when a PEXELS_API_KEY is set.
   let brollSrc;
   let brollDurationSeconds;
   let publicBrollPath;
-  if (job.assets?.broll_source === "local" && job.assets?.broll_folder) {
-    const brollFolder = resolve(repoRoot, job.assets.broll_folder);
-    if (existsSync(brollFolder)) {
-      const pick = pickBrollClip(brollFolder);
+  if (brollPlan.source === "pexels" && brollPlan.shouldFetch) {
+    const apiKey = process.env.PEXELS_API_KEY;
+    if (apiKey) {
+      console.log(`\n[broll] pexels fetch: "${brollPlan.query}" (up to ${brollPlan.count}) -> ${brollPlan.folder}`);
+      try {
+        const fetchResult = await fetchPexelsBroll({
+          query: brollPlan.query,
+          count: brollPlan.count,
+          outDir: brollPlan.folder,
+          apiKey
+        });
+        if (fetchResult.errors.length > 0) {
+          console.warn(
+            `[broll][warning] pexels fetch reported ${fetchResult.errors.length} error(s); using whatever clips are present.`
+          );
+        }
+      } catch (error) {
+        console.warn(`[broll][warning] pexels fetch failed (${error.message}); using cached clips or a solid background.`);
+      }
+    } else {
+      console.warn(
+        `[broll][warning] broll_source="pexels" but PEXELS_API_KEY is not set; using cached clips or a solid background.`
+      );
+    }
+  }
+
+  if (brollPlan.folder) {
+    if (existsSync(brollPlan.folder)) {
+      const pick = pickBrollClip(brollPlan.folder);
       if (pick) {
         const ext = extname(pick.path) || ".mp4";
         const publicBrollDir = resolve(remotionDir, "public/broll");
@@ -462,7 +538,7 @@ function main() {
         console.log(`\n[broll] background: ${basename(pick.path)} (${pick.w}x${pick.h}) -> public/${brollSrc}`);
       }
     } else {
-      console.log(`\n[broll] declared local folder not found: ${brollFolder} (rendering on black).`);
+      console.log(`\n[broll] b-roll folder not found: ${brollPlan.folder} (rendering on black).`);
     }
   }
 
@@ -560,5 +636,5 @@ function main() {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main();
+  await main();
 }
