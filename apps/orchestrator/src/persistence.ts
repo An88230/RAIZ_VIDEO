@@ -308,7 +308,10 @@ export async function updateJobStatus(
   }
 
   if (options.metadata !== undefined) {
-    nextStatusRecord.metadata = options.metadata;
+    nextStatusRecord.metadata = {
+      ...(currentStatus.metadata ?? {}),
+      ...options.metadata
+    };
   }
 
   await writeFile(resolve(getJobDir(jobId, options), "status.json"), `${JSON.stringify(nextStatusRecord, null, 2)}\n`);

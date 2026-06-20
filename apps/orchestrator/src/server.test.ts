@@ -727,6 +727,14 @@ if (renderingResponse.statusCode !== 200) {
   throw new Error(`Expected preparing -> rendering to work, got ${renderingResponse.statusCode}.`);
 }
 
+const renderingBody = JSON.parse(renderingResponse.body) as {
+  metadata?: { step?: string; adapter?: string };
+};
+
+if (renderingBody.metadata?.step !== "assets" || renderingBody.metadata.adapter !== "short_video_maker") {
+  throw new Error("Expected PATCH status metadata to merge new keys without dropping existing metadata.");
+}
+
 const renderedResponse = await server.inject({
   method: "PATCH",
   url: `/jobs/${sampleJob.job_id}/status`,

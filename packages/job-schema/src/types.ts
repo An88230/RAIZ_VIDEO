@@ -37,6 +37,8 @@ export interface RaizJob {
   assets?: {
     broll_source?: "google_drive" | "local" | "pexels" | "pixabay" | "none";
     broll_folder?: string;
+    search_terms?: string[];
+    broll_count?: number;
     music?: string;
     logo?: string;
   };

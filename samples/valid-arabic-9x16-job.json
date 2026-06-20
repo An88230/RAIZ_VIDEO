@@ -23,6 +23,11 @@
   "assets": {
     "broll_source": "local",
     "broll_folder": "storage/assets/broll",
+    "search_terms": [
+      "dark desk notebook",
+      "phone light at night"
+    ],
+    "broll_count": 2,
     "music": "/storage/audio/pulse-low.mp3"
   },
   "captions": {

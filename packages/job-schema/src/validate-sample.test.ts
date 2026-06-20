@@ -22,4 +22,8 @@ if (result.job.resolution.width !== 1080 || result.job.resolution.height !== 192
   throw new Error("Expected sample job to be 1080x1920.");
 }
 
+if (result.job.assets?.search_terms?.length !== 2 || result.job.assets.broll_count !== 2) {
+  throw new Error("Expected sample job to demonstrate optional b-roll search terms and count.");
+}
+
 console.log(`Validated RAIZ sample job: ${result.job.job_id}`);

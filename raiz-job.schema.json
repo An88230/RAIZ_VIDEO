@@ -109,6 +109,16 @@
         "broll_folder": {
           "type": "string"
         },
+        "search_terms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "broll_count": {
+          "type": "integer",
+          "minimum": 1
+        },
         "music": {
           "type": "string"
         },
