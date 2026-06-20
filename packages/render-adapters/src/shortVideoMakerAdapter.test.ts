@@ -7,6 +7,7 @@ import { validateRaizJob } from "@raiz/job-schema";
 
 import { mapToShortVideoMakerPayload } from "./shortVideoMakerPayloadMapper.js";
 import { mapToShortVideoMakerUpstreamRequest } from "./shortVideoMakerUpstreamMapper.js";
+import { remotionDirectAdapter } from "./remotionDirectAdapter.js";
 import { shortVideoMakerAdapter } from "./shortVideoMakerAdapter.js";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -20,6 +21,34 @@ if (!validation.valid) {
 
 if (!(await shortVideoMakerAdapter.canRender(validation.job))) {
   throw new Error("short-video-maker adapter should accept short_video_maker jobs.");
+}
+
+const remotionDirectJob = {
+  ...validation.job,
+  job_id: "adapter-remotion-direct-001",
+  template: {
+    ...validation.job.template,
+    engine: "remotion_direct" as const
+  },
+  output: {
+    ...validation.job.output,
+    filename: "adapter-remotion-direct-001.mp4"
+  }
+};
+
+if (await shortVideoMakerAdapter.canRender(remotionDirectJob)) {
+  throw new Error("short-video-maker adapter must not accept remotion_direct jobs.");
+}
+
+if (!(await remotionDirectAdapter.canRender(remotionDirectJob))) {
+  throw new Error("remotion_direct adapter should accept remotion_direct jobs.");
+}
+
+const preparedRemotionDirect = await remotionDirectAdapter.prepare(remotionDirectJob);
+const remotionDirectResult = await remotionDirectAdapter.render(preparedRemotionDirect);
+
+if (remotionDirectResult.status !== "queued" || remotionDirectResult.engine !== "remotion_direct") {
+  throw new Error("remotion_direct adapter must queue safely without executing Remotion.");
 }
 
 const prepared = await shortVideoMakerAdapter.prepare(validation.job);

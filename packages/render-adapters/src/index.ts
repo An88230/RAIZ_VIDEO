@@ -1,3 +1,4 @@
+export { remotionDirectAdapter } from "./remotionDirectAdapter.js";
 export { checkShortVideoMakerHealth, shortVideoMakerAdapter } from "./shortVideoMakerAdapter.js";
 export { mapToShortVideoMakerPayload } from "./shortVideoMakerPayloadMapper.js";
 export type {

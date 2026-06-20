@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsx src/shortVideoMakerAdapter.test.ts"
+    "test": "npm run build && tsx src/shortVideoMakerAdapter.test.ts"
   },
   "dependencies": {
     "@raiz/job-schema": "0.1.0"

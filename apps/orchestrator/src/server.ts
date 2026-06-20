@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { validateRaizJob } from "@raiz/job-schema";
-import { shortVideoMakerAdapter } from "@raiz/render-adapters";
+import { remotionDirectAdapter, shortVideoMakerAdapter } from "@raiz/render-adapters";
 import { resolve } from "node:path";
 
 import { loadEnvConfig } from "./envConfig.js";
@@ -111,7 +111,7 @@ export interface CreateServerOptions {
   remotionRenderer?: RemotionRenderer;
 }
 
-const renderAdapters = [shortVideoMakerAdapter];
+const renderAdapters = [shortVideoMakerAdapter, remotionDirectAdapter];
 const realHttpClient = createFetchHttpClient();
 const defaultRemotionRenderer = createScriptRemotionRenderer();
 

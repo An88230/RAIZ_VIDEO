@@ -623,6 +623,59 @@ if (
   throw new Error("Expected artifacts endpoint to be read-only for status.json and events.ndjson.");
 }
 
+const remotionDirectQueuedJob = {
+  ...sampleJob,
+  job_id: "remotion-direct-adapter-queued-001",
+  template: {
+    ...(sampleJob.template as Record<string, unknown>),
+    engine: "remotion_direct"
+  },
+  output: {
+    ...(sampleJob.output as Record<string, unknown>),
+    filename: "remotion-direct-adapter-queued-001.mp4"
+  }
+};
+
+const remotionDirectQueuedResponse = await server.inject({
+  method: "POST",
+  url: "/jobs/render",
+  payload: remotionDirectQueuedJob
+});
+
+if (remotionDirectQueuedResponse.statusCode !== 202) {
+  throw new Error(`Expected /jobs/render to queue remotion_direct job, got ${remotionDirectQueuedResponse.statusCode}.`);
+}
+
+const remotionDirectQueuedBody = JSON.parse(remotionDirectQueuedResponse.body) as {
+  status?: string;
+  adapter?: string;
+  output_path?: string | null;
+};
+
+if (
+  remotionDirectQueuedBody.status !== "queued" ||
+  remotionDirectQueuedBody.adapter !== "remotion_direct" ||
+  remotionDirectQueuedBody.output_path !== null
+) {
+  throw new Error("Expected remotion_direct /jobs/render request to remain queued without output.");
+}
+
+const remotionDirectQueuedDir = resolve(storageRoot, "jobs", "remotion-direct-adapter-queued-001");
+const remotionDirectQueuedStatus = JSON.parse(
+  readFileSync(resolve(remotionDirectQueuedDir, "status.json"), "utf8")
+) as {
+  status?: string;
+  adapter?: string;
+};
+
+if (remotionDirectQueuedStatus.status !== "queued" || remotionDirectQueuedStatus.adapter !== "remotion_direct") {
+  throw new Error("Expected remotion_direct queued status to be persisted with remotion_direct adapter.");
+}
+
+if (existsSync(resolve(remotionDirectQueuedDir, "render-manifest.remotion-direct.json"))) {
+  throw new Error("Expected /jobs/render not to execute remotion_direct rendering.");
+}
+
 const duplicateResponse = await server.inject({
   method: "POST",
   url: "/jobs/render",
