@@ -3549,10 +3549,14 @@ const enginesBody = JSON.parse(enginesResponse.body) as {
 };
 
 if (
-  enginesBody.default_engine !== "short_video_maker" ||
-  !enginesBody.engines?.some((engine) => engine.id === "short_video_maker" && engine.status === "available")
+  enginesBody.default_engine !== "remotion_direct" ||
+  !enginesBody.engines?.some((engine) => engine.id === "remotion_direct" && engine.status === "available")
 ) {
-  throw new Error("Expected /engines to list short_video_maker as the available default engine.");
+  throw new Error("Expected /engines to list remotion_direct as the available default engine.");
+}
+
+if (!enginesBody.engines?.some((engine) => engine.id === "short_video_maker" && engine.status === "available")) {
+  throw new Error("Expected /engines to keep short_video_maker available as the optional English path.");
 }
 
 // --- H1: voice preflight is conditional on voice.type ----------------------

@@ -111,7 +111,10 @@ export interface CreateServerOptions {
   remotionRenderer?: RemotionRenderer;
 }
 
-const renderAdapters = [shortVideoMakerAdapter, remotionDirectAdapter];
+// remotion_direct is the Arabic-first v1 engine, so it leads the list and is the
+// reported default engine. short_video_maker stays registered as the optional
+// English-only path. /jobs/render routes by engine id, not array order.
+const renderAdapters = [remotionDirectAdapter, shortVideoMakerAdapter];
 const realHttpClient = createFetchHttpClient();
 const defaultRemotionRenderer = createScriptRemotionRenderer();
 

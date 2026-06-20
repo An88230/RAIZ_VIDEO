@@ -278,7 +278,7 @@ Preflight also checks declared local voice and asset paths. Missing local voice 
 
 `GET /health` returns a lightweight liveness response for the orchestrator itself, including the current real render flag. It does not touch storage, start processes, or call the network.
 
-`GET /engines` lists the render adapters registered in RAIZ and the default engine. It does not call any engine.
+`GET /engines` lists the render adapters registered in RAIZ and the default engine. The default engine is `remotion_direct` (the Arabic-first v1 render path); `short_video_maker` stays registered as the optional English-only path. Routing in `POST /jobs/render` is by engine id, so adapter order only affects which engine is reported as the default. It does not call any engine.
 
 `GET /adapters/short-video-maker/health` inspects `vendor/short-video-maker` for expected reference files. It does not install dependencies, start Docker, call short-video-maker, or render anything.
 
