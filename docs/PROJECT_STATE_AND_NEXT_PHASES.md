@@ -73,9 +73,10 @@ Known hardening needs:
 The orchestrator must be hardened before building a full UI or production local
 agent runner on top of it.
 
-### 3. Creative OS / Show Mode / Local Agent
+### 3. Creative OS / Show Mode / Local Agent Bridge
 
-Status: contracts and documentation exist; this is not a full production runner.
+Status: contracts, documentation, and samples only; this is not a full
+production Local Agent Runner.
 
 Current assets define the contract boundary for future Creative OS and Show Mode
 work. They describe commands, action results, allowed actions, security rules,
@@ -89,6 +90,23 @@ Important boundary:
   language and side effects.
 - Gemini TTS is the official RAIZ voice layer, but render-ready Gemini voice
   generation remains a future local-agent production path.
+
+There is no complete production Local Agent Runner yet.
+
+## Source of Truth
+
+Do not depend on `apps/orchestrator/dist` when evaluating current behavior.
+
+The source of truth is:
+
+- `apps/orchestrator/src`
+- package source files under `packages/`
+- root schemas and samples
+- scripts under `scripts/`
+
+`apps/orchestrator/dist` is build output only. It may be useful for confirming a
+build artifact, but it must not be treated as the design source, reviewed as the
+primary implementation, or edited directly.
 
 ## Do Not Build Yet
 
@@ -108,11 +126,13 @@ The correct order is:
 4. Build a minimal control surface.
 5. Implement the Local Agent runner.
 
-## Recommended Next Phase
+## Next Steps
 
-`Phase 35 — Orchestrator Hardening`
+### Phase 35 — Orchestrator Hardening
 
-Recommended scope:
+Recommended next phase.
+
+Scope:
 
 - Add a controlled retry transition from `failed` to `preparing`.
 - Make `status.json` writes atomic using temp file plus rename.
@@ -133,14 +153,46 @@ Exit criteria:
 - All tests pass.
 - Build passes.
 
-## Later Direction
+### Phase 36 — Caption Readability
 
-After Phase 35, the recommended direction is:
+Scope:
 
-- Caption readability improvements.
-- Arabic voice layer hardening.
-- Minimal local control surface.
-- Local Agent runner implementation.
+- Minimum cue duration.
+- Better Arabic cue splitting.
+- Maximum characters per cue.
+- Prevent short Arabic captions from flashing too quickly.
+- Later: Whisper word-level timing.
+
+### Phase 37 — Arabic Voice Layer
+
+Scope:
+
+- Add a real Arabic voice provider.
+- Add cross-platform TTS.
+- Add voice caching and provider support rules.
+- Reduce dependence on macOS `say`.
+
+### Phase 38 — Minimal Control Surface
+
+Scope:
+
+- Job list.
+- Job status.
+- Warnings.
+- Render trigger.
+- Output preview.
+- Retry failed job after Phase 35 makes retry safe.
+
+### Phase 39 — Local Agent Runner
+
+Scope:
+
+- Validate `creative_os_command.json`.
+- Resolve actions through the allowed action registry.
+- Execute allowed actions only.
+- Return `creative_os_action_result.json`.
+- Write audit logs.
+- Reject unregistered or unsafe actions.
 
 ## Current Rule
 

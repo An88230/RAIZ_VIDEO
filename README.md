@@ -37,7 +37,8 @@ Current local-first scope:
 
 ## Current Status
 
-The current project state and recommended next phase are documented in
+The current project state, source-of-truth boundary, and recommended next phases
+are documented in
 [PROJECT_STATE_AND_NEXT_PHASES.md](docs/PROJECT_STATE_AND_NEXT_PHASES.md).
 
 Last stable tag: `v0.1.34`. Recommended next phase: `Phase 35 — Orchestrator
