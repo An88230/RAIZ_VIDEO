@@ -37,7 +37,7 @@ const MACOS_SAY_FALLBACK_SOURCE = "macos_say_fallback";
 function parseArgs(argv) {
   const args = { job: "samples/valid-arabic-9x16-job.json", out: null, dryVoiceCheck: false };
   for (const token of argv) {
-    if (token === "--dry-voice-check") {
+    if (token === "--dry-voice-check" || token === "--dry-check") {
       args.dryVoiceCheck = true;
       continue;
     }
@@ -104,6 +104,110 @@ export function resolveVoicePlan(job, options = {}) {
 function logVoiceWarnings(warnings) {
   for (const warning of warnings) {
     console.warn(`[voice][warning] ${warning}`);
+  }
+}
+
+export function resolveLocalRenderSupportPlan(job) {
+  const warnings = [];
+  const assets = job.assets ?? {};
+  const captions = job.captions ?? {};
+  const template = job.template ?? {};
+  const output = job.output ?? {};
+
+  if (typeof job.title === "string" && job.title.trim()) {
+    warnings.push(
+      "job.title is accepted by the schema but the current Remotion v1 template does not render title text; it is metadata only."
+    );
+  }
+
+  if (typeof assets.music === "string" && assets.music.trim()) {
+    warnings.push(
+      "assets.music is reserved/unsupported in render-arabic-local v1; final MP4 is muxed with narration only and no music bed."
+    );
+  }
+
+  if (typeof assets.logo === "string" && assets.logo.trim()) {
+    warnings.push("assets.logo is reserved/unsupported in render-arabic-local v1 and is not composited.");
+  }
+
+  if (
+    typeof assets.broll_source === "string" &&
+    assets.broll_source.trim() &&
+    !["local", "none"].includes(assets.broll_source)
+  ) {
+    warnings.push(
+      `assets.broll_source="${assets.broll_source}" is reserved/unsupported in render-arabic-local v1; only local b-roll folders are used.`
+    );
+  }
+
+  if (captions.enabled === false) {
+    warnings.push(
+      "captions.enabled=false is not implemented in render-arabic-local v1; captions are still generated from script cues."
+    );
+  }
+
+  if (typeof captions.format === "string" && captions.format !== "ass") {
+    warnings.push(
+      `captions.format="${captions.format}" is reserved/unsupported in render-arabic-local v1; both SRT/ASS sidecars are written and Remotion captions are still rendered.`
+    );
+  }
+
+  if (typeof captions.font === "string" && captions.font.trim()) {
+    warnings.push(
+      `captions.font="${captions.font}" is reserved/unsupported in render-arabic-local v1; the Remotion template uses bundled IBM Plex Sans Arabic.`
+    );
+  }
+
+  if (typeof captions.position === "string" && captions.position.trim()) {
+    warnings.push(
+      `captions.position="${captions.position}" is reserved/unsupported in render-arabic-local v1; the current template renders captions at its fixed bottom layout.`
+    );
+  }
+
+  if (captions.burn_in !== undefined) {
+    warnings.push(
+      `captions.burn_in=${captions.burn_in} is not configurable in render-arabic-local v1; captions are always burned into the Remotion visual layer.`
+    );
+  }
+
+  if (typeof captions.style_preset === "string" && captions.style_preset.trim()) {
+    warnings.push(
+      `captions.style_preset="${captions.style_preset}" is reserved/unsupported in render-arabic-local v1.`
+    );
+  }
+
+  if (typeof template.style_preset === "string" && template.style_preset.trim()) {
+    warnings.push(
+      `template.style_preset="${template.style_preset}" is reserved/unsupported in render-arabic-local v1.`
+    );
+  }
+
+  if (typeof output.drive_folder === "string" && output.drive_folder.trim()) {
+    warnings.push(
+      "output.drive_folder is ignored by render-arabic-local v1; use --out or the default storage/renders/{job_id} folder."
+    );
+  }
+
+  if (job.language && job.language !== "ar") {
+    warnings.push(
+      `language="${job.language}" is accepted by the schema but render-arabic-local v1 is Arabic-first and uses Arabic RTL text rendering.`
+    );
+  }
+
+  if (job.direction && job.direction !== "rtl") {
+    warnings.push(
+      `direction="${job.direction}" is accepted by the schema but render-arabic-local v1 renders with RTL Arabic text components.`
+    );
+  }
+
+  return {
+    warnings
+  };
+}
+
+function logRenderSupportWarnings(warnings) {
+  for (const warning of warnings) {
+    console.warn(`[render][warning] ${warning}`);
   }
 }
 
@@ -310,10 +414,13 @@ function main() {
   console.log(`  out:   ${outDir}`);
 
   const voicePlan = resolveVoicePlan(job);
+  const renderSupportPlan = resolveLocalRenderSupportPlan(job);
   logVoiceWarnings(voicePlan.warnings);
+  logRenderSupportWarnings(renderSupportPlan.warnings);
 
   if (args.dryVoiceCheck) {
     console.log(`[voice] dry check source: ${voicePlan.source}`);
+    console.log(`[render] dry check warnings: ${renderSupportPlan.warnings.length}`);
     return;
   }
 
