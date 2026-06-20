@@ -35,6 +35,14 @@ Current local-first scope:
 - Warn when schema-supported local render fields are reserved or not implemented
   in local render v1.
 
+## Current Status
+
+The current project state and recommended next phase are documented in
+[PROJECT_STATE_AND_NEXT_PHASES.md](docs/PROJECT_STATE_AND_NEXT_PHASES.md).
+
+Last stable tag: `v0.1.34`. Recommended next phase: `Phase 35 — Orchestrator
+Hardening`.
+
 ## Vendor Policy
 
 `vendor/` is reference-only upstream code.
