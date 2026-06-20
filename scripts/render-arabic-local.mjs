@@ -2,7 +2,7 @@
 // RAIZ local Arabic render driver (Remotion-direct + external/local Arabic VO + FFmpeg).
 //
 // Pipeline:
-//   1. Resolve Arabic VO (job external_file path, else macOS `say -v Majed`).
+//   1. Resolve Arabic VO (job external_file path, else macOS `say -v Majed` with a warning).
 //   2. Measure VO duration with ffprobe.
 //   3. Build timed caption cues + write captions.srt / captions.ass sidecars.
 //   4. Render the visual layer with Remotion (1080x1920, RTL Arabic).
@@ -32,16 +32,79 @@ const FPS = 30;
 // underscores (e.g. raiz_dark_hook_01), so map "_" -> "-" to bridge the two.
 const DEFAULT_COMPOSITION_ID = "raiz-dark-hook-01";
 const SAY_VOICE = "Majed";
+const MACOS_SAY_FALLBACK_SOURCE = "macos_say_fallback";
 
 function parseArgs(argv) {
-  const args = { job: "samples/valid-arabic-9x16-job.json", out: null };
+  const args = { job: "samples/valid-arabic-9x16-job.json", out: null, dryVoiceCheck: false };
   for (const token of argv) {
+    if (token === "--dry-voice-check") {
+      args.dryVoiceCheck = true;
+      continue;
+    }
+
     const match = /^--([^=]+)=(.*)$/.exec(token);
     if (match) {
       args[match[1]] = match[2];
     }
   }
   return args;
+}
+
+export function resolveVoicePlan(job, options = {}) {
+  const root = options.repoRoot ?? repoRoot;
+  const voice = job.voice ?? {};
+  const voiceType = typeof voice.type === "string" && voice.type.trim() ? voice.type.trim() : "unspecified";
+  const provider = typeof voice.provider === "string" && voice.provider.trim() ? voice.provider.trim() : null;
+  const voiceName = typeof voice.voice_name === "string" && voice.voice_name.trim() ? voice.voice_name.trim() : null;
+  const externalPath =
+    voiceType === "external_file" && typeof voice.file_path === "string" && voice.file_path.trim()
+      ? resolve(root, voice.file_path)
+      : null;
+
+  if (externalPath && existsSync(externalPath)) {
+    return {
+      source: "external_file",
+      externalPath,
+      fallbackVoice: null,
+      warnings: []
+    };
+  }
+
+  const requestSummary = [
+    `voice.type="${voiceType}"`,
+    provider ? `provider="${provider}"` : null,
+    voiceName ? `voice_name="${voiceName}"` : null
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const warnings = [];
+
+  if (externalPath) {
+    warnings.push(
+      `Requested external voice file was not found at ${externalPath}; falling back to macOS say voice "${SAY_VOICE}".`
+    );
+  } else if (voiceType === "external_file") {
+    warnings.push(
+      `Requested voice.type="external_file" without a usable file_path; falling back to macOS say voice "${SAY_VOICE}".`
+    );
+  } else {
+    warnings.push(
+      `Requested voice provider is not implemented in scripts/render-arabic-local.mjs (${requestSummary}); falling back to macOS say voice "${SAY_VOICE}".`
+    );
+  }
+
+  return {
+    source: MACOS_SAY_FALLBACK_SOURCE,
+    externalPath: null,
+    fallbackVoice: SAY_VOICE,
+    warnings
+  };
+}
+
+function logVoiceWarnings(warnings) {
+  for (const warning of warnings) {
+    console.warn(`[voice][warning] ${warning}`);
+  }
 }
 
 function run(label, command, commandArgs, options = {}) {
@@ -246,17 +309,19 @@ function main() {
   console.log(`  jobId: ${jobId}`);
   console.log(`  out:   ${outDir}`);
 
+  const voicePlan = resolveVoicePlan(job);
+  logVoiceWarnings(voicePlan.warnings);
+
+  if (args.dryVoiceCheck) {
+    console.log(`[voice] dry check source: ${voicePlan.source}`);
+    return;
+  }
+
   // 1. Voice-over: external file if provided and present, else local macOS TTS.
-  const externalPath = job.voice?.type === "external_file" && job.voice?.file_path
-    ? resolve(repoRoot, job.voice.file_path)
-    : null;
-  if (externalPath && existsSync(externalPath)) {
-    console.log(`\n[voice] using external VO: ${externalPath}`);
-    copyFileSync(externalPath, voiceAiff);
+  if (voicePlan.source === "external_file" && voicePlan.externalPath) {
+    console.log(`\n[voice] using external VO: ${voicePlan.externalPath}`);
+    copyFileSync(voicePlan.externalPath, voiceAiff);
   } else {
-    if (externalPath) {
-      console.log(`\n[voice] declared external VO missing (${externalPath}); generating local Arabic VO instead.`);
-    }
     const narration = hook ? `${hook} ${script}` : script;
     run("generate Arabic VO (say)", "say", ["-v", SAY_VOICE, "-o", voiceAiff, narration]);
   }
@@ -387,4 +452,6 @@ function main() {
   }
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}
