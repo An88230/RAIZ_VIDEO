@@ -1,0 +1,186 @@
+{
+  "name": "RAIZ Render Batch v2",
+  "nodes": [
+    {
+      "id": "bd926719-8073-432d-8d07-a3cb2857bd2d",
+      "name": "Render Batch Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 3,
+              "triggerAtHour": 4,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1b314cef-fea7-4a79-8dcf-210ac7f47ad0",
+      "name": "Read Video Inventory",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "VIDEOS_MASTER",
+          "cachedResultName": "VIDEOS_MASTER"
+        },
+        "options": {
+          "returnAllMatches": "returnAllMatches",
+          "outputFormatting": {
+            "values": {
+              "general": "UNFORMATTED_VALUE",
+              "date": "FORMATTED_STRING"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "350978a0-ad18-4c97-b58c-2cc448ee5b2f",
+      "name": "Archive Cap Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nconst archiveCap = 9;\nconst archived = rows.filter(r => String(r.main_status || '').trim().toUpperCase() === 'RENDERED').length;\nif (archived >= archiveCap) return [];\nconst ready = rows\n  .filter(r => String(r.main_status || '').trim().toUpperCase() === 'SCRIPT_READY')\n  .filter(r => {\n    const v = r.n8n_lock;\n    return v === false || v === 0 || v === '' || v === null || String(v).trim().toUpperCase() === 'FALSE';\n  })\n  .sort((a,b) => Number(a.priority || 999) - Number(b.priority || 999));\nconst slots = Math.max(0, archiveCap - archived);\nreturn ready.slice(0, slots).map(row => ({ json: { ...row, archived_count: archived, archive_cap: archiveCap, render_batch_ready: true } }));"
+      }
+    },
+    {
+      "id": "3629b012-211b-45f8-88c0-46bac3ee35e1",
+      "name": "Build Render Batch Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: {\n  video_id: item.json.video_id,\n  main_status: item.json.main_status,\n  next_stage: 'RENDERING',\n  render_endpoint_required: true,\n  message: 'Render API is not configured yet. Connect RAIZ /render endpoint before enabling render execution.',\n  expected_payload_source: 'CONTENT_ASSETS asset_type=RENDER_PAYLOAD'\n}}));"
+      }
+    },
+    {
+      "id": "f890bdab-f82b-421f-a808-5ba8902a3460",
+      "name": "Manual Render Batch",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "4e99e278-0739-4105-b503-ab3bfdcf765a",
+      "name": "Sticky Note 7484bed1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        336,
+        256
+      ],
+      "parameters": {
+        "content": {
+          "config": {
+            "name": "Render Batch v2 Note",
+            "parameters": {
+              "content": "RAIZ Render Batch v2: runs every 3 days, respects archive_cap=9, selects SCRIPT_READY rows. Actual render API is intentionally not connected yet.",
+              "height": 220,
+              "width": 700,
+              "color": 5
+            }
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Render Batch Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Video Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Video Inventory": {
+      "main": [
+        [
+          {
+            "node": "Archive Cap Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Archive Cap Gate": {
+      "main": [
+        [
+          {
+            "node": "Build Render Batch Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Render Batch": {
+      "main": [
+        [
+          {
+            "node": "Read Video Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

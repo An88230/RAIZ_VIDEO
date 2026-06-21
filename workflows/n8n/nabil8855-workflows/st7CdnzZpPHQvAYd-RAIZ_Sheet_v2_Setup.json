@@ -1,0 +1,536 @@
+{
+  "name": "RAIZ Sheet v2 Setup",
+  "nodes": [
+    {
+      "id": "b55c103a-c973-4d33-a406-48f9d6c56572",
+      "name": "Manual Sheet v2 Setup",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "36215a9a-bb38-416d-94fd-7ab0f3984321",
+      "name": "Create AUTOPILOT_CONFIG",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "create",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "title": "AUTOPILOT_CONFIG",
+        "options": {
+          "rightToLeft": false,
+          "tabColor": "0aa55c"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "c16eead2-8b21-4845-bd05-7a9e2d08b0df",
+      "name": "Build AUTOPILOT_CONFIG Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [\n  { json: { setting_key: 'weekly_idea_count', setting_value: '7', setting_type: 'number', description: 'عدد الأفكار التي يولدها النظام أسبوعيًا', active: true } },\n  { json: { setting_key: 'daily_script_runs', setting_value: '3', setting_type: 'number', description: 'عدد مرات كتابة المحتوى يوميًا', active: true } },\n  { json: { setting_key: 'pipeline_cap', setting_value: '9', setting_type: 'number', description: 'أقصى عدد بين SCRIPT_READY و RENDERED', active: true } },\n  { json: { setting_key: 'archive_cap', setting_value: '9', setting_type: 'number', description: 'أقصى عدد فيديوهات مرندرة في المخزون', active: true } },\n  { json: { setting_key: 'publish_times', setting_value: '11:00,18:30', setting_type: 'text', description: 'أوقات النشر بتوقيت الرياض', active: true } },\n  { json: { setting_key: 'default_language', setting_value: 'ar', setting_type: 'text', description: 'لغة الإنتاج', active: true } },\n  { json: { setting_key: 'default_format', setting_value: '9:16', setting_type: 'text', description: 'صيغة الفيديو', active: true } },\n  { json: { setting_key: 'default_duration_sec', setting_value: '45', setting_type: 'number', description: 'مدة الفيديو الافتراضية', active: true } },\n  { json: { setting_key: 'default_template_id', setting_value: 'new_era_dark_editorial', setting_type: 'text', description: 'القالب الافتراضي', active: true } },\n  { json: { setting_key: 'human_review_required', setting_value: 'FALSE', setting_type: 'boolean', description: 'هل يحتاج مراجعة بشرية', active: true } },\n  { json: { setting_key: 'render_environment', setting_value: 'LOCAL', setting_type: 'text', description: 'بيئة الرندر الحالية', active: true } },\n  { json: { setting_key: 'youtube_privacy_default', setting_value: 'private', setting_type: 'text', description: 'الرفع الأول على يوتيوب', active: true } }\n];"
+      }
+    },
+    {
+      "id": "1b914a9c-af35-47db-9db0-c1ba13153642",
+      "name": "Append AUTOPILOT_CONFIG Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "AUTOPILOT_CONFIG",
+          "cachedResultName": "AUTOPILOT_CONFIG"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "schema": [
+            {
+              "id": "setting_key",
+              "displayName": "setting_key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "setting_value",
+              "displayName": "setting_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "setting_type",
+              "displayName": "setting_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "active",
+              "displayName": "active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "locationDefine": {
+            "values": {
+              "headerRow": 1
+            }
+          },
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "2c1fba14-1539-41dd-8715-b00def7551d2",
+      "name": "Create PUBLISHING_SLOTS",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "create",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "title": "PUBLISHING_SLOTS",
+        "options": {
+          "rightToLeft": false,
+          "tabColor": "fbbc04"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "cb08ea4d-9434-4087-9a5c-b301abf2fe94",
+      "name": "Build PUBLISHING_SLOTS Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [\n  { json: { slot_id: 'SLOT-001', platform: 'YOUTUBE_SHORTS', publish_time: '11:00', timezone: 'Asia/Riyadh', max_posts: 1, active: true, notes: 'Golden slot 1' } },\n  { json: { slot_id: 'SLOT-002', platform: 'YOUTUBE_SHORTS', publish_time: '18:30', timezone: 'Asia/Riyadh', max_posts: 1, active: true, notes: 'Golden slot 2' } }\n];"
+      }
+    },
+    {
+      "id": "4d775abd-e460-4c0c-88ee-1cebd17e8da5",
+      "name": "Append PUBLISHING_SLOTS Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "PUBLISHING_SLOTS",
+          "cachedResultName": "PUBLISHING_SLOTS"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "schema": [
+            {
+              "id": "slot_id",
+              "displayName": "slot_id",
+              "display": true,
+              "type": "string"
+            },
+            {
+              "id": "platform",
+              "displayName": "platform",
+              "display": true,
+              "type": "string"
+            },
+            {
+              "id": "publish_time",
+              "displayName": "publish_time",
+              "display": true,
+              "type": "string"
+            },
+            {
+              "id": "timezone",
+              "displayName": "timezone",
+              "display": true,
+              "type": "string"
+            },
+            {
+              "id": "max_posts",
+              "displayName": "max_posts",
+              "display": true,
+              "type": "number"
+            },
+            {
+              "id": "active",
+              "displayName": "active",
+              "display": true,
+              "type": "boolean"
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "display": true,
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "locationDefine": {
+            "values": {
+              "headerRow": 1
+            }
+          },
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "cfccdf96-b4b9-46f3-badf-dfeb4a9b497d",
+      "name": "Create AUTOPILOT_TOPICS",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "create",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "title": "AUTOPILOT_TOPICS",
+        "options": {
+          "rightToLeft": true,
+          "tabColor": "a142f4"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "54e0be3e-c905-4e54-9b17-3c21c02b22eb",
+      "name": "Build AUTOPILOT_TOPICS Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "jsCode": "return [\n  { json: { topic_id: 'TOPIC-001', topic_name: 'مشاعر العصر الجديد', category: 'New Era Emotions', series_name: 'قاموس مشاعر العصر الجديد', priority: 1, active: true, notes: 'Core series' } },\n  { json: { topic_id: 'TOPIC-002', topic_name: 'الإنسان الحديث', category: 'Modern Human Condition', series_name: 'أسئلة تفضح العصر الحديث', priority: 2, active: true, notes: 'Social/psychological' } },\n  { json: { topic_id: 'TOPIC-003', topic_name: 'الذكاء الاصطناعي والإبداع', category: 'AI & Creativity', series_name: 'RAIZ Creative Signals', priority: 3, active: true, notes: 'AI creator angle' } },\n  { json: { topic_id: 'TOPIC-004', topic_name: 'التفكير الإبداعي', category: 'Creative Thinking', series_name: 'RAIZ Creative Signals', priority: 4, active: true, notes: 'Creator education' } },\n  { json: { topic_id: 'TOPIC-005', topic_name: 'الإنتاجية النفسية', category: 'Productivity', series_name: 'أسئلة تفضح العصر الحديث', priority: 5, active: true, notes: 'Work/life fatigue' } }\n];"
+      }
+    },
+    {
+      "id": "6af38332-fac4-4dde-8c42-2947f3e04d66",
+      "name": "Append AUTOPILOT_TOPICS Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2016,
+        0
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "AUTOPILOT_TOPICS",
+          "cachedResultName": "AUTOPILOT_TOPICS"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "schema": [
+            {
+              "id": "topic_id",
+              "displayName": "topic_id",
+              "display": true,
+              "type": "string"
+            },
+            {
+              "id": "topic_name",
+              "displayName": "topic_name",
+              "display": true,
+              "type": "string"
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "display": true,
+              "type": "string"
+            },
+            {
+              "id": "series_name",
+              "displayName": "series_name",
+              "display": true,
+              "type": "string"
+            },
+            {
+              "id": "priority",
+              "displayName": "priority",
+              "display": true,
+              "type": "number"
+            },
+            {
+              "id": "active",
+              "displayName": "active",
+              "display": true,
+              "type": "boolean"
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "display": true,
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "locationDefine": {
+            "values": {
+              "headerRow": 1
+            }
+          },
+          "handlingExtraData": "insertInNewColumn"
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Sheet v2 Setup": {
+      "main": [
+        [
+          {
+            "node": "Create AUTOPILOT_CONFIG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create AUTOPILOT_CONFIG": {
+      "main": [
+        [
+          {
+            "node": "Build AUTOPILOT_CONFIG Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AUTOPILOT_CONFIG Rows": {
+      "main": [
+        [
+          {
+            "node": "Append AUTOPILOT_CONFIG Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append AUTOPILOT_CONFIG Rows": {
+      "main": [
+        [
+          {
+            "node": "Create PUBLISHING_SLOTS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create PUBLISHING_SLOTS": {
+      "main": [
+        [
+          {
+            "node": "Build PUBLISHING_SLOTS Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build PUBLISHING_SLOTS Rows": {
+      "main": [
+        [
+          {
+            "node": "Append PUBLISHING_SLOTS Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append PUBLISHING_SLOTS Rows": {
+      "main": [
+        [
+          {
+            "node": "Create AUTOPILOT_TOPICS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create AUTOPILOT_TOPICS": {
+      "main": [
+        [
+          {
+            "node": "Build AUTOPILOT_TOPICS Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AUTOPILOT_TOPICS Rows": {
+      "main": [
+        [
+          {
+            "node": "Append AUTOPILOT_TOPICS Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

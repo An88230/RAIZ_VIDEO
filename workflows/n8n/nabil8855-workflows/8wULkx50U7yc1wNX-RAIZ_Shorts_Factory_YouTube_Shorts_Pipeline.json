@@ -1,0 +1,1413 @@
+{
+  "name": "RAIZ Shorts Factory — YouTube Shorts Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            },
+            {
+              "triggerAtHour": 14
+            },
+            {
+              "triggerAtHour": 19
+            }
+          ]
+        }
+      },
+      "id": "8c4a9cf8-b2d0-4074-9b28-0c887e618298",
+      "name": "Daily Shorts Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        128,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let first = $input.first()?.json || {};\nlet generated = null;\ntry { generated = $('Parse Script Package').first().json; } catch (e) { generated = null; }\nconst payload = generated || first.body || first;\nconst sources = payload.raizSources || payload.googleSources || {};\n\nif (payload.shouldContinue === false) {\n  return [{ json: { machine: 'RAIZ Shorts Factory', stage: 'no_ready_rows', status: 'idle', message: payload.message || 'No ready video rows found.', googleSources: sources } }];\n}\n\nconst topic = payload.title_working || payload.topic || payload.idea || payload.idea_text || 'الانطفاء اللامع';\nconst angle = payload.hook || payload.hook_angle || payload.angle || 'حالة إنسان حديث ينجز من الخارج وينطفئ بهدوء من الداخل';\nconst tone = payload.tone || payload.creative_direction || 'عربي معاصر، بصري، مكثف، غير وعظي';\nconst duration = Number(payload.duration_target_sec || payload.duration || 35);\nconst now = new Date().toISOString();\n\nconst title = payload.youtube_title || `${topic} | مشاعر العصر الجديد #shorts`;\nconst voiceover = payload.voiceover_text || `${angle}\\n${payload.idea_text || ''}\\nسمّه بدل ما يبتلعك.`;\nconst captions = Array.isArray(payload.captions) && payload.captions.length ? payload.captions : [angle, payload.idea_text || '', 'سمّه بدل ما يبتلعك.'].filter(Boolean);\nconst scriptText = payload.script_final_arabic || voiceover;\nconst visualPlan = Array.isArray(payload.visual_plan) ? payload.visual_plan : [];\n\nreturn [{\n  json: {\n    machine: 'RAIZ Shorts Factory',\n    stage: 'package_ready',\n    createdAt: now,\n    source: payload.source || 'google_sheet',\n    video_id: payload.video_id || null,\n    idea_id: payload.idea_id || null,\n    googleSources: sources,\n    masterContextLoaded: Boolean(payload.masterContextLoaded),\n    topic,\n    angle,\n    tone,\n    format: {\n      platform: payload.platform_primary || 'YouTube Shorts',\n      aspectRatio: payload.format || '9:16',\n      resolution: '1080x1920',\n      targetDurationSeconds: duration,\n      language: payload.language || 'ar',\n      rtl: true\n    },\n    script: {\n      hook: angle,\n      body: scriptText,\n      cta: 'سمّه بدل ما يبتلعك.',\n      voiceover,\n      captions\n    },\n    visualDirection: {\n      style: tone,\n      scenes: visualPlan.length ? visualPlan : [\n        'Opening black frame with one sharp Arabic sentence',\n        'Abstract data fracture around document edge',\n        'Central text card with controlled red underline',\n        'Final term lockup and CTA'\n      ]\n    },\n    renderPayload: {\n      video_id: payload.video_id || undefined,\n      template: payload.template_id || payload.template || payload.render_template || 'new_era_dark_editorial',\n      output: 'mp4',\n      size: { width: 1080, height: 1920 },\n      fps: 30,\n      duration,\n      language: payload.language || 'ar',\n      rtl: true,\n      topic,\n      angle,\n      voiceover,\n      captions,\n      scenes: visualPlan,\n      text: { hook: angle, body: scriptText, cta: 'سمّه بدل ما يبتلعك.', direction: 'rtl', language: payload.language || 'ar' },\n      audio: { voiceoverText: voiceover, voice: payload.voice || 'arabic-calm-confident' },\n      sources: {\n        spreadsheetId: sources.googleSheet?.spreadsheetId,\n        documentId: sources.googleDoc?.documentId,\n        masterContextLoaded: Boolean(payload.masterContextLoaded)\n      },\n      brand: { footer: '© 2025 Nabil88 | nabil88.art' }\n    },\n    youtube: {\n      title,\n      description: payload.youtube_description || `${scriptText}\\n\\n#shorts #مشاعر_العصر_الجديد #nabil88`,\n      tags: 'shorts,arabic,مشاعر العصر الجديد,nabil88,RAIZ',\n      categoryId: '22',\n      privacyStatus: payload.privacyStatus || 'private',\n      madeForKids: false\n    }\n  }\n}];"
+      },
+      "id": "71ab41ad-92f3-4d08-a2da-18cba9c50093",
+      "name": "Build Shorts Package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://example-render-api.com/render",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.renderPayload }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 300000
+        }
+      },
+      "id": "81510c2d-773c-47b1-8489-7a592cc089d8",
+      "name": "Send Render Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        800,
+        304
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.videoUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 300000
+        }
+      },
+      "id": "49aec77c-148f-4c8f-ad5e-4204824fbd0f",
+      "name": "Download Rendered Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1152,
+        304
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "resource": "video",
+        "operation": "upload",
+        "title": "={{ $(\"Build Shorts Package\").item.json.youtube.title }}",
+        "categoryId": "={{ $(\"Build Shorts Package\").item.json.youtube.categoryId }}",
+        "options": {
+          "description": "={{ $(\"Build Shorts Package\").item.json.youtube.description }}",
+          "notifySubscribers": false,
+          "privacyStatus": "private",
+          "selfDeclaredMadeForKids": false,
+          "tags": "={{ $(\"Build Shorts Package\").item.json.youtube.tags }}"
+        }
+      },
+      "id": "48ac5653-fb20-44ea-81fa-dec70c37281c",
+      "name": "Upload to YouTube Shorts",
+      "type": "n8n-nodes-base.youTube",
+      "typeVersion": 1,
+      "position": [
+        1488,
+        304
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status",
+              "name": "status",
+              "value": "draft_ready_configure_render_and_youtube",
+              "type": "string"
+            },
+            {
+              "id": "next",
+              "name": "nextStep",
+              "value": "Add render API URL, add YouTube OAuth2 credential, enable disabled media nodes, then test manually.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "b71dfc28-230f-4315-8582-ff61bf7829c4",
+      "name": "Return Package Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1824,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "raiz-shorts-intake",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "571e8ba3-286c-4101-801a-04b7e1d131c0",
+      "name": "Idea Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        160,
+        352
+      ],
+      "webhookId": "ea58dd64-6565-4a81-8877-b2f9027a7908"
+    },
+    {
+      "parameters": {
+        "content": "## RAIZ Shorts Factory\n\nPipeline: رصد/فكرة → سكربت → Visual Direction → Render Payload → فيديو MP4 → رفع YouTube Shorts.\n\nالعقد الثلاث الأخيرة معطّلة عمدًا حتى تضيف Render API حقيقي وYouTube OAuth2. لا تفعّل النشر إلا بعد اختبار فيديو private.",
+        "height": 3912,
+        "width": 632,
+        "color": 3
+      },
+      "id": "b2a6ddad-afaa-474a-a4e9-50e8854d895a",
+      "name": "Sticky Note 5eb2a756",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        576,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sources = {\n  googleSheet: {\n    name: 'RAIZ Video Factory Control Sheet v1',\n    spreadsheetId: '1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE',\n    url: 'https://docs.google.com/spreadsheets/d/1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE/edit?usp=drivesdk',\n    primarySheet: 'VIDEOS_MASTER',\n    docsLibrarySheet: 'DOCS_LIBRARY',\n    readyRule: 'main_status=APPROVED AND n8n_lock=FALSE'\n  },\n  googleDoc: {\n    name: 'RAIZ Video Factory Master Context',\n    documentId: '1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4',\n    url: 'https://docs.google.com/document/d/1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4/edit?usp=drivesdk',\n    docType: 'PROJECT_CONTEXT',\n    usage: 'Master context used before script, captions, visual plan, and render payload generation.'\n  },\n  note: 'Google OAuth credentials are still required before n8n can read Sheets/Docs directly.'\n};\n\nreturn $input.all().map((item) => ({\n  json: {\n    ...item.json,\n    raizSources: sources\n  }\n}));"
+      },
+      "id": "d27a9114-217e-48d7-ae19-ea5ef4720d2b",
+      "name": "RAIZ Google Sources Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Google Sources مثبتة داخل الماكينة\n\nGoogle Sheet:\n`1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE`\n\nPrimary table:\n`VIDEOS_MASTER`\n\nReady rule:\n`main_status=APPROVED` + `n8n_lock=FALSE`\n\nGoogle Doc / Master Context:\n`1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4`\n\nمهم: القراءة الفعلية من Google تحتاج Google Sheets/Docs OAuth Credential داخل n8n. حاليًا الموجود فقط OpenAI credential.",
+        "height": 340,
+        "width": 1048,
+        "color": 4
+      },
+      "id": "25e33407-4e24-4fb6-bed4-6f2ae05be9b8",
+      "name": "Sticky Note Google Sources",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "VIDEOS_MASTER",
+          "cachedResultName": "VIDEOS_MASTER"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "main_status",
+              "lookupValue": "APPROVED"
+            }
+          ]
+        },
+        "options": {
+          "outputFormatting": {
+            "values": {
+              "general": "UNFORMATTED_VALUE",
+              "date": "FORMATTED_STRING"
+            }
+          }
+        }
+      },
+      "id": "9f838530-263f-46f3-b53e-87c8826220d4",
+      "name": "Read Approved Videos",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        560,
+        160
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map((item) => item.json);\n\nconst isUnlocked = (value) => {\n  if (value === false || value === 0 || value === null || value === undefined || value === '') return true;\n  if (String(value).trim().toUpperCase() === 'FALSE') return true;\n  return false;\n};\n\nconst ready = rows\n  .filter((row) => String(row.main_status || '').trim().toUpperCase() === 'APPROVED')\n  .filter((row) => isUnlocked(row.n8n_lock))\n  .sort((a, b) => Number(a.priority || 999) - Number(b.priority || 999));\n\nif (!ready.length) {\n  return [{\n    json: {\n      stage: 'no_ready_rows',\n      message: 'No VIDEOS_MASTER row matched main_status=APPROVED and n8n_lock=FALSE.',\n      shouldContinue: false\n    }\n  }];\n}\n\nconst selected = ready[0];\n\nreturn [{\n  json: {\n    ...selected,\n    shouldContinue: true,\n    source: 'google_sheet',\n    raizSources: {\n      googleSheet: {\n        name: 'RAIZ Video Factory Control Sheet v1',\n        spreadsheetId: '1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE',\n        primarySheet: 'VIDEOS_MASTER',\n        readyRule: 'main_status=APPROVED AND n8n_lock=FALSE'\n      },\n      googleDoc: {\n        name: 'RAIZ Video Factory Master Context',\n        documentId: '1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4',\n        docType: 'PROJECT_CONTEXT'\n      }\n    }\n  }\n}];"
+      },
+      "id": "768e2d2e-3377-4b1e-a27b-57a168b28761",
+      "name": "Pick Next Approved Video",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "documentURL": "https://docs.google.com/document/d/1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4/edit?usp=drivesdk"
+      },
+      "id": "b6c89fee-0bd1-4bc4-8c26-e492c7cd3382",
+      "name": "Fetch Master Context Doc",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        160
+      ],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "ZsvQYsPlld1OAWTi",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const doc = $input.first()?.json || {};\nlet video = {};\ntry {\n  video = $('Pick Next Approved Video').first().json || {};\n} catch (error) {\n  video = {};\n}\n\nreturn [{\n  json: {\n    ...video,\n    masterContext: doc.content || '',\n    masterContextDocumentId: doc.documentId || '1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4',\n    masterContextLoaded: Boolean(doc.content)\n  }\n}];"
+      },
+      "id": "6d12d391-6991-4ece-8732-8c0761bbc0bc",
+      "name": "Attach Master Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nreturn $input.all().map((item) => ({\n  json: {\n    video_id: item.json.video_id,\n    n8n_lock: true,\n    locked_by: $execution.id,\n    locked_at: now,\n    current_stage: 'SCRIPT',\n    updated_at: now\n  }\n}));"
+      },
+      "id": "f28a1692-8cc5-4c79-82f1-8875ff0ab3bc",
+      "name": "Prepare Lock Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "VIDEOS_MASTER",
+          "cachedResultName": "VIDEOS_MASTER"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "video_id"
+          ],
+          "schema": [
+            {
+              "id": "video_id",
+              "displayName": "video_id",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "n8n_lock",
+              "displayName": "n8n_lock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "locked_by",
+              "displayName": "locked_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "locked_at",
+              "displayName": "locked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "current_stage",
+              "displayName": "current_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "locationDefine": {
+            "values": {}
+          }
+        }
+      },
+      "id": "09c32152-e873-4794-a954-a46a72dfecc1",
+      "name": "Lock Video Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1264,
+        -176
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const video = $input.first().json;\nconst context = video.masterContext || '';\nconst prompt = `اكتب حزمة إنتاج فيديو YouTube Shorts عربية بنظام RAIZ Video Factory.\n\nالمطلوب إخراج JSON صالح فقط، بدون Markdown، بهذا الشكل:\n{\n  \"hook\": \"...\",\n  \"script_final_arabic\": \"...\",\n  \"voiceover_text\": \"...\",\n  \"captions\": [\"...\"],\n  \"visual_plan\": [{\"scene_id\":\"S01\",\"time\":\"0-5s\",\"visual\":\"...\",\"caption\":\"...\",\"audio\":\"...\"}],\n  \"youtube_title\": \"...\",\n  \"youtube_description\": \"...\",\n  \"render_notes\": \"...\",\n  \"quality_notes\": \"...\"\n}\n\nقواعد ثابتة:\n- اللغة عربية.\n- المدة المستهدفة: ${video.duration_target_sec || 45} ثانية.\n- لا تستخدم وعظ مباشر.\n- النص قصير، بصري، قوي، قابل للتعليق الصوتي.\n- الكابتشن جمل قصيرة جدًا تظهر على الشاشة.\n- الهوية: ${video.creative_direction || 'أسود وأبيض، دفء إنساني، نص عربي واضح'}.\n- أضف footer في الملاحظات: © 2025 Nabil88 | nabil88.art\n\nبيانات الفيديو:\nvideo_id: ${video.video_id}\ntitle_working: ${video.title_working}\nidea_text: ${video.idea_text}\nhook_angle: ${video.hook_angle}\naudience: ${video.audience}\ncategory: ${video.category}\nseries_name: ${video.series_name}\n\nقالب/مرجع Google Doc:\n${context.slice(0, 5000)}\n`;\nreturn [{ json: { ...video, aiPrompt: prompt } }];"
+      },
+      "id": "7b86ccbf-0972-4bec-95b2-a27cead8c6f4",
+      "name": "Build AI Script Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1648,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "gpt-4o-mini",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are RAIZ Video Factory's Arabic short-video script engine. Return valid JSON only. No markdown."
+            },
+            {
+              "content": "={{ $json.aiPrompt }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 1600,
+          "textFormat": {
+            "textOptions": {
+              "type": "json_object"
+            }
+          },
+          "temperature": 0.5
+        }
+      },
+      "id": "e3ec534e-fef1-4db6-8821-346f36fa184b",
+      "name": "Generate Script Package",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1888,
+        160
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "Q1wSE6qLMuwwTEAu",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const ai = $input.first().json;\nconst video = $('Attach Master Context').first().json;\n\nfunction findJsonString(value) {\n  if (typeof value === 'string') return value;\n  if (Array.isArray(value)) {\n    for (const v of value) {\n      const found = findJsonString(v);\n      if (found) return found;\n    }\n  }\n  if (value && typeof value === 'object') {\n    for (const k of ['output_text','text','content','message','response','data']) {\n      if (value[k]) {\n        const found = findJsonString(value[k]);\n        if (found) return found;\n      }\n    }\n    for (const v of Object.values(value)) {\n      const found = findJsonString(v);\n      if (found) return found;\n    }\n  }\n  return '';\n}\n\nlet raw = findJsonString(ai) || JSON.stringify(ai);\nraw = raw.replace(/```json|```/g, '').trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(raw);\n} catch (error) {\n  parsed = {\n    hook: video.hook_angle || 'إنت مش تعبان… إنت شغال وجزء منك مطفّي',\n    script_final_arabic: `${video.hook_angle || ''}\\n${video.idea_text || ''}\\nسمّه بدل ما يبتلعك.`,\n    voiceover_text: `${video.hook_angle || ''}\\n${video.idea_text || ''}\\nسمّه بدل ما يبتلعك.`,\n    captions: [video.hook_angle || 'إنت مش تعبان…', video.idea_text || 'جزء منك مطفّي بهدوء.', 'سمّه بدل ما يبتلعك.'],\n    visual_plan: [\n      { scene_id: 'S01', time: '0-5s', visual: video.creative_direction || 'black and white Arabic editorial frame', caption: video.hook_angle || '', audio: 'quiet pulse' }\n    ],\n    youtube_title: `${video.title_working || 'RAIZ Short'} | #shorts`,\n    youtube_description: `${video.idea_text || ''}\\n\\n#shorts #nabil88`,\n    render_notes: 'Fallback package because AI JSON parse failed.',\n    quality_notes: error.message\n  };\n}\n\nconst now = new Date().toISOString();\nconst captions = Array.isArray(parsed.captions) ? parsed.captions : String(parsed.captions || '').split('\\n').filter(Boolean);\nconst visualPlan = Array.isArray(parsed.visual_plan) ? parsed.visual_plan : [];\nconst voiceover = parsed.voiceover_text || parsed.script_final_arabic || captions.join('\\n');\n\nreturn [{\n  json: {\n    ...video,\n    generatedAt: now,\n    aiRaw: ai,\n    hook: parsed.hook || video.hook_angle,\n    script_final_arabic: parsed.script_final_arabic || voiceover,\n    voiceover_text: voiceover,\n    captions,\n    visual_plan: visualPlan,\n    youtube_title: parsed.youtube_title || `${video.title_working || 'RAIZ Short'} | #shorts`,\n    youtube_description: parsed.youtube_description || `${video.idea_text || ''}\\n\\n#shorts #nabil88`,\n    render_notes: parsed.render_notes || '',\n    quality_notes: parsed.quality_notes || '',\n    ai_parse_status: 'OK'\n  }\n}];"
+      },
+      "id": "155980d9-3dba-40b6-b803-4e8b409e0688",
+      "name": "Parse Script Package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2128,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\nconst now = new Date().toISOString();\nconst videoId = p.video_id;\nconst version = 1;\nconst base = {\n  video_id: videoId,\n  version,\n  status: 'READY',\n  duration_sec: Number(p.duration_target_sec || 45),\n  voice_model: 'arabic-calm-confident',\n  caption_style: 'Arabic Bold Bottom',\n  render_template: p.template_id || p.render_template || 'new_era_dark_editorial',\n  created_by: 'n8n/OpenAI',\n  created_at: now,\n  updated_at: now\n};\nconst renderPayload = {\n  video_id: videoId,\n  template: p.template_id || 'new_era_dark_editorial',\n  format: p.format || '9:16',\n  width: 1080,\n  height: 1920,\n  fps: 30,\n  duration: Number(p.duration_target_sec || 45),\n  language: p.language || 'ar',\n  rtl: true,\n  topic: p.title_working,\n  angle: p.hook || p.hook_angle,\n  voiceover: p.voiceover_text,\n  captions: p.captions,\n  scenes: p.visual_plan,\n  brand: { footer: '© 2025 Nabil88 | nabil88.art' }\n};\nreturn [\n  { json: { asset_id: `AST-${videoId}-SCRIPT-${Date.now()}`, ...base, asset_type: 'SCRIPT', content_text: p.script_final_arabic, notes: 'Generated final Arabic script' } },\n  { json: { asset_id: `AST-${videoId}-VOICE-${Date.now()}`, ...base, asset_type: 'VOICEOVER_TEXT', content_text: p.voiceover_text, notes: 'Generated voiceover text' } },\n  { json: { asset_id: `AST-${videoId}-CAPTIONS-${Date.now()}`, ...base, asset_type: 'CAPTIONS', content_text: p.captions.join('\\n'), json_payload: JSON.stringify(p.captions), notes: 'Generated on-screen captions' } },\n  { json: { asset_id: `AST-${videoId}-VISUAL-${Date.now()}`, ...base, asset_type: 'VISUAL_PLAN', content_text: p.render_notes || '', json_payload: JSON.stringify(p.visual_plan), notes: 'Generated scene/visual plan' } },\n  { json: { asset_id: `AST-${videoId}-RENDER-${Date.now()}`, ...base, asset_type: 'RENDER_PAYLOAD', content_text: null, json_payload: JSON.stringify(renderPayload), notes: 'Draft render payload for RAIZ Video' } }\n];"
+      },
+      "id": "6960eb5a-7fe9-4824-b968-13962ecfb770",
+      "name": "Prepare Content Asset Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2368,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "CONTENT_ASSETS",
+          "cachedResultName": "CONTENT_ASSETS"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "schema": [
+            {
+              "id": "asset_id",
+              "displayName": "asset_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "video_id",
+              "displayName": "video_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "asset_type",
+              "displayName": "asset_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "version",
+              "displayName": "version",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "content_text",
+              "displayName": "content_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "json_payload",
+              "displayName": "json_payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "duration_sec",
+              "displayName": "duration_sec",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "voice_model",
+              "displayName": "voice_model",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "caption_style",
+              "displayName": "caption_style",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "render_template",
+              "displayName": "render_template",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "created_by",
+              "displayName": "created_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "locationDefine": {
+            "values": {}
+          }
+        }
+      },
+      "id": "ddff0bdc-c3f5-49db-95fb-3a4a94aedafd",
+      "name": "Save Content Assets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2608,
+        160
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Parse Script Package').first().json;\nconst now = new Date().toISOString();\nreturn [{ json: { video_id: p.video_id, main_status: 'SCRIPT_READY', current_stage: 'RENDER_PAYLOAD', n8n_lock: false, locked_by: '', locked_at: '', quality_status: 'PENDING', updated_at: now, notes: 'Script, captions, visual plan, and render payload generated by n8n.' } }];"
+      },
+      "id": "a58f3862-60d4-49e9-af66-b4f53bc2eeec",
+      "name": "Prepare Script Ready Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2848,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "VIDEOS_MASTER",
+          "cachedResultName": "VIDEOS_MASTER"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [
+            "video_id"
+          ],
+          "schema": [
+            {
+              "id": "video_id",
+              "displayName": "video_id",
+              "required": true,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "main_status",
+              "displayName": "main_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "current_stage",
+              "displayName": "current_stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "n8n_lock",
+              "displayName": "n8n_lock",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "locked_by",
+              "displayName": "locked_by",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "locked_at",
+              "displayName": "locked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "quality_status",
+              "displayName": "quality_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "updated_at",
+              "displayName": "updated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "locationDefine": {
+            "values": {}
+          }
+        }
+      },
+      "id": "602463b2-988a-4900-b6e0-a87d9ce778a6",
+      "name": "Update Video Script Ready",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3088,
+        160
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Parse Script Package').first().json;\nconst now = new Date().toISOString();\nreturn [{ json: { run_id: `RUN-${Date.now()}`, video_id: p.video_id, workflow_name: 'daily_short_factory_v1', execution_id: $execution.id, stage: 'SCRIPT', event_type: 'SUCCESS', status_before: 'APPROVED', status_after: 'SCRIPT_READY', started_at: p.generatedAt || now, finished_at: now, duration_sec: 0, error_id: '', error_message: '', retry_count_after: Number(p.retry_count || 0), next_action: 'Render payload ready. Configure RAIZ render API next.', raw_response_json: JSON.stringify({ hook: p.hook, captions: p.captions, visual_plan_count: p.visual_plan?.length || 0 }), notes: 'Script assets generated and saved.' } }];"
+      },
+      "id": "18309a23-f83e-4366-8d83-b718532a60d5",
+      "name": "Prepare Run Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3328,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "RUN_LOGS",
+          "cachedResultName": "RUN_LOGS"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "schema": [
+            {
+              "id": "run_id",
+              "displayName": "run_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "video_id",
+              "displayName": "video_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "workflow_name",
+              "displayName": "workflow_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "execution_id",
+              "displayName": "execution_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "stage",
+              "displayName": "stage",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "event_type",
+              "displayName": "event_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "status_before",
+              "displayName": "status_before",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "status_after",
+              "displayName": "status_after",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "started_at",
+              "displayName": "started_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "finished_at",
+              "displayName": "finished_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "duration_sec",
+              "displayName": "duration_sec",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "error_id",
+              "displayName": "error_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "retry_count_after",
+              "displayName": "retry_count_after",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "next_action",
+              "displayName": "next_action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "raw_response_json",
+              "displayName": "raw_response_json",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "notes",
+              "displayName": "notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "locationDefine": {
+            "values": {}
+          }
+        }
+      },
+      "id": "45624550-b085-475d-b324-aac3a8b4933a",
+      "name": "Append Run Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        3568,
+        160
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "models/gemini-3-flash-preview",
+          "cachedResultName": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ 'راجع سكربت الفيديو التالي كمدقق RAIZ. أعد JSON فقط يحتوي quality_score وrisks وsuggested_fixes.\\n\\n' + JSON.stringify($json) }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {
+          "googleSearch": false,
+          "urlContext": false,
+          "codeExecution": false
+        },
+        "options": {
+          "includeMergedResponse": true,
+          "systemMessage": "You are RAIZ Video Factory quality reviewer. Return valid JSON only.",
+          "maxOutputTokens": 800,
+          "temperature": 0.2,
+          "thinkingBudget": 0
+        }
+      },
+      "id": "76fc6543-85b8-4a0b-ba33-e0beb0f530f6",
+      "name": "Gemini Script Review Placeholder",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        2128,
+        560
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ROemEXw2v0XAXmqD",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "content": "## Gemini + Google Tasks جاهزين\n\nCredentials ظهرت:\n- Google Gemini(PaLM) Api account\n- Google Tasks account\n\nالاستخدام الصحيح:\n1. Gemini = مراجعة جودة السكربت أو بديل توليد عند فشل OpenAI.\n2. Google Tasks = إنشاء مهمة مراجعة بشرية بعد SCRIPT_READY عندما `human_review_required=true`.\n\nتمت إضافة Gemini Script Review Placeholder كعقدة Disabled حتى لا تضيف تكلفة أو تغيّر المسار الناجح.\n\nGoogle Tasks يحتاج اختيار Task List من واجهة n8n قبل التفعيل.",
+        "height": 300,
+        "width": 720,
+        "color": 5
+      },
+      "id": "8464017e-4d40-4401-aaf0-07ff917e3827",
+      "name": "Sticky Note Gemini Tasks",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1952,
+        768
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "VIDEOS_MASTER",
+          "cachedResultName": "VIDEOS_MASTER"
+        },
+        "options": {
+          "outputFormatting": {
+            "values": {
+              "general": "UNFORMATTED_VALUE",
+              "date": "FORMATTED_STRING"
+            }
+          }
+        }
+      },
+      "id": "c8d6dd39-2895-42b8-a43a-cf539273dbaf",
+      "name": "Read Pipeline Inventory",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        512,
+        -80
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(i => i.json);\nconst cap = 9;\nconst activeStatuses = new Set(['SCRIPT_READY', 'RENDERED']);\nconst pipelineCount = rows.filter(r => activeStatuses.has(String(r.main_status || '').trim().toUpperCase())).length;\n\nif (pipelineCount >= cap) {\n  return [];\n}\n\nlet base = {};\ntry { base = $('RAIZ Google Sources Config').first().json || {}; } catch (e) { base = {}; }\n\nreturn [{ json: { ...base, pipeline_count: pipelineCount, total_inventory_cap: cap, capacity_available: cap - pipelineCount } }];"
+      },
+      "id": "f5e14fc6-5cd2-40a4-a3d3-7ad799f9ccfc",
+      "name": "Pipeline Cap Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        -80
+      ]
+    }
+  ],
+  "connections": {
+    "Build Shorts Package": {
+      "main": [
+        [
+          {
+            "node": "Send Render Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Render Job": {
+      "main": [
+        [
+          {
+            "node": "Download Rendered Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Rendered Video": {
+      "main": [
+        [
+          {
+            "node": "Upload to YouTube Shorts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to YouTube Shorts": {
+      "main": [
+        [
+          {
+            "node": "Return Package Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Shorts Trigger": {
+      "main": [
+        [
+          {
+            "node": "RAIZ Google Sources Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idea Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Shorts Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Approved Videos": {
+      "main": [
+        [
+          {
+            "node": "Pick Next Approved Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Master Context Doc": {
+      "main": [
+        [
+          {
+            "node": "Attach Master Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Next Approved Video": {
+      "main": [
+        [
+          {
+            "node": "Prepare Lock Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Lock Update": {
+      "main": [
+        [
+          {
+            "node": "Lock Video Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lock Video Row": {
+      "main": [
+        [
+          {
+            "node": "Fetch Master Context Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Master Context": {
+      "main": [
+        [
+          {
+            "node": "Build AI Script Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Script Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Script Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Script Package": {
+      "main": [
+        [
+          {
+            "node": "Parse Script Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Script Package": {
+      "main": [
+        [
+          {
+            "node": "Prepare Content Asset Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Content Asset Rows": {
+      "main": [
+        [
+          {
+            "node": "Save Content Assets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Content Assets": {
+      "main": [
+        [
+          {
+            "node": "Prepare Script Ready Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Script Ready Update": {
+      "main": [
+        [
+          {
+            "node": "Update Video Script Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Video Script Ready": {
+      "main": [
+        [
+          {
+            "node": "Prepare Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Run Log": {
+      "main": [
+        [
+          {
+            "node": "Append Run Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Run Log": {
+      "main": [
+        [
+          {
+            "node": "Build Shorts Package",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAIZ Google Sources Config": {
+      "main": [
+        [
+          {
+            "node": "Read Pipeline Inventory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Pipeline Inventory": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Cap Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pipeline Cap Gate": {
+      "main": [
+        [
+          {
+            "node": "Read Approved Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

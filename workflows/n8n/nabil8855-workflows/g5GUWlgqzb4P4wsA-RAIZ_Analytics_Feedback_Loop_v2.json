@@ -1,0 +1,171 @@
+{
+  "name": "RAIZ Analytics Feedback Loop v2",
+  "nodes": [
+    {
+      "id": "f0fd4328-2188-4e54-b395-dd465ac3a2d5",
+      "name": "Daily Analytics Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 7,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "41413e64-fbf0-4fdb-94ea-e39b5f92532e",
+      "name": "Read Published Videos",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "read",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "VIDEOS_MASTER",
+          "cachedResultName": "VIDEOS_MASTER"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "main_status",
+              "lookupValue": "PUBLISHED"
+            }
+          ]
+        },
+        "combineFilters": "AND",
+        "options": {
+          "returnAllMatches": "returnAllMatches",
+          "outputFormatting": {
+            "values": {
+              "general": "UNFORMATTED_VALUE",
+              "date": "FORMATTED_STRING"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "15b61d8d-cb93-45e6-a658-ac85bf0ee84d",
+      "name": "Build Analytics Fetch Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "jsCode": "return $input.all().map(item => ({ json: {\n  video_id: item.json.video_id,\n  youtube_url: item.json.youtube_url || '',\n  analytics_required: true,\n  message: 'YouTube Analytics credential is not configured yet. Add YouTube/Data API credential before enabling analytics fetch.',\n  next_target: 'ANALYTICS sheet and AUTOPILOT_CONFIG feedback'\n}}));"
+      }
+    },
+    {
+      "id": "f19f6fba-948b-439e-abe0-889f8f0183cf",
+      "name": "Manual Analytics Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "5fe375c8-3b47-4518-9a22-16f76cb43df5",
+      "name": "Sticky Note e1564d87",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        224,
+        256
+      ],
+      "parameters": {
+        "content": {
+          "config": {
+            "name": "Analytics v2 Note",
+            "parameters": {
+              "content": "RAIZ Analytics Feedback Loop v2: reads PUBLISHED videos and prepares analytics fetch. YouTube Analytics connection is not enabled yet.",
+              "height": 220,
+              "width": 720,
+              "color": 7
+            }
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Analytics Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Published Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Published Videos": {
+      "main": [
+        [
+          {
+            "node": "Build Analytics Fetch Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Analytics Run": {
+      "main": [
+        [
+          {
+            "node": "Read Published Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}

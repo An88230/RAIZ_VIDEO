@@ -1,0 +1,253 @@
+{
+  "name": "RAIZ Weekly Idea Autopilot",
+  "nodes": [
+    {
+      "id": "55eeff55-e574-4532-873d-f68b6f64d319",
+      "name": "Weekly Idea Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 6,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2a0bce2e-8652-4e60-af6b-714ffe6a11d1",
+      "name": "Build Autopilot Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst year = now.getUTCFullYear();\nconst week = Math.ceil((((now - new Date(Date.UTC(year,0,1))) / 86400000) + new Date(Date.UTC(year,0,1)).getUTCDay() + 1) / 7);\nreturn [{ json: {\n  week_key: year + '-W' + String(week).padStart(2, '0'),\n  target_count: 7,\n  language: 'ar',\n  platform_primary: 'YOUTUBE_SHORTS',\n  format: '9:16',\n  duration_target_sec: 45,\n  default_template_id: 'new_era_dark_editorial',\n  default_render_environment: 'LOCAL',\n  categories: ['New Era Emotions','Modern Human Condition','AI & Creativity','Creative Thinking','Productivity','Philosophy'],\n  series: ['New Era Emotions Lexicon','Modern Human Questions','RAIZ Creative Signals']\n}}];"
+      }
+    },
+    {
+      "id": "ee00bfc3-c094-4106-b9dd-edbcc66b53db",
+      "name": "Gemini Weekly Idea Scout",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "models/gemini-3-flash-preview",
+          "cachedResultName": "models/gemini-3-flash-preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ 'Create 7 original Arabic YouTube Shorts ideas for RAIZ Video Factory. Return JSON only in this shape: {\"ideas\":[{\"category\":\"\",\"series_name\":\"\",\"title_working\":\"\",\"idea_text\":\"\",\"hook_angle\":\"\",\"audience\":\"\",\"creative_direction\":\"\",\"priority\":1,\"source_type\":\"AUTOPILOT_RESEARCH\",\"trend_signal\":\"\",\"search_basis\":\"\"}]} Context: ' + JSON.stringify($json) }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "jsonOutput": true,
+        "builtInTools": {
+          "googleSearch": true,
+          "urlContext": false,
+          "codeExecution": false
+        },
+        "options": {
+          "includeMergedResponse": true,
+          "systemMessage": "Return valid JSON only. Generate original Arabic-first ideas for vertical Shorts.",
+          "maxOutputTokens": 2200,
+          "temperature": 0.55,
+          "thinkingBudget": 0
+        }
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ROemEXw2v0XAXmqD",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "a2c1e347-d54a-4feb-a26a-2d15cd0c0531",
+      "name": "Build VIDEOS_MASTER Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "jsCode": "const ai = $input.first().json;\nconst brief = $('Build Autopilot Brief').first().json;\nfunction scan(v) {\n  if (typeof v === 'string') return v;\n  if (Array.isArray(v)) { for (const x of v) { const r = scan(x); if (r) return r; } }\n  if (v && typeof v === 'object') {\n    for (const key of ['output','output_text','text','content','message','response','mergedResponse','data']) {\n      if (v[key]) { const r = scan(v[key]); if (r) return r; }\n    }\n    for (const x of Object.values(v)) { const r = scan(x); if (r) return r; }\n  }\n  return '';\n}\nlet raw = scan(ai) || JSON.stringify(ai);\nconst tick = String.fromCharCode(96); raw = raw.split(tick + tick + tick + 'json').join('').split(tick + tick + tick).join('').trim();\nlet parsed;\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = { ideas: [] }; }\nconst fallback = [{\n  category:'New Era Emotions',\n  series_name:'New Era Emotions Lexicon',\n  title_working:'الهوية المعلقة',\n  idea_text:'شخص يعرف نفسه داخليًا لكنه لا يعرف كيف يعيش هذه الهوية وسط توقعات الناس.',\n  hook_angle:'إنت عارف نفسك… بس مش عارف تعيشها.',\n  audience:'المبدع / الموظف / الإنسان الحديث',\n  creative_direction:'أسود وأبيض، ورقة بيضاء، علامة حمراء واحدة، إحساس وثيقة نفسية',\n  priority:1,\n  source_type:'AUTOPILOT_FALLBACK',\n  trend_signal:'identity fatigue',\n  search_basis:'fallback'\n}];\nconst ideas = Array.isArray(parsed.ideas) && parsed.ideas.length ? parsed.ideas : fallback;\nconst now = new Date().toISOString();\nconst stamp = Date.now();\nreturn ideas.slice(0, Number(brief.target_count || 7)).map((idea, index) => {\n  const seq = String(index + 1).padStart(3, '0');\n  const videoId = 'RVF-' + brief.week_key + '-' + seq + '-' + stamp;\n  return { json: {\n    video_id: videoId,\n    idea_id: 'IDEA-' + brief.week_key + '-' + seq + '-' + stamp,\n    trend_id: '',\n    source_type: idea.source_type || 'AUTOPILOT_RESEARCH',\n    language: 'ar',\n    platform_primary: 'YOUTUBE_SHORTS',\n    format: '9:16',\n    duration_target_sec: 45,\n    category: idea.category || 'New Era Emotions',\n    series_name: idea.series_name || 'RAIZ Creative Signals',\n    title_working: idea.title_working || 'RAIZ Idea ' + seq,\n    idea_text: idea.idea_text || '',\n    hook_angle: idea.hook_angle || '',\n    audience: idea.audience || 'الإنسان الحديث / المبدع العربي',\n    creative_direction: idea.creative_direction || 'أسود وأبيض، دفء إنساني، نص عربي واضح، إيقاع هادئ',\n    priority: Number(idea.priority || index + 1),\n    approval_status: 'APPROVED',\n    main_status: 'APPROVED',\n    current_stage: 'SCRIPT',\n    assigned_workflow: 'daily_short_factory_v1',\n    n8n_lock: false,\n    retry_count: 0,\n    max_retries: 3,\n    quality_status: 'PENDING',\n    human_review_required: false,\n    publish_status: 'NOT_READY',\n    created_at: now,\n    updated_at: now,\n    notes: 'Autogenerated by RAIZ Weekly Idea Autopilot. trend_signal=' + (idea.trend_signal || '') + '; search_basis=' + (idea.search_basis || ''),\n    template_id: 'new_era_dark_editorial',\n    template_version: 'v1.0',\n    render_environment: 'LOCAL',\n    render_worker_id: 'local_docker',\n    render_mode: 'local_only',\n    template_release_id: 'REL-2026-001',\n    local_render_status: 'PENDING',\n    docker_test_status: 'PENDING',\n    doc_source_of_truth: 'DOCS_FOR_LONG_TEXT__SHEETS_FOR_STATUS'\n  }};\n});"
+      }
+    },
+    {
+      "id": "5043baa2-6510-4e2c-bfba-db5131481e60",
+      "name": "Append Rows To VIDEOS_MASTER",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        896,
+        96
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "append",
+        "authentication": "oAuth2",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE",
+          "cachedResultName": "RAIZ Video Factory Control Sheet v1"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "VIDEOS_MASTER",
+          "cachedResultName": "VIDEOS_MASTER"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "schema": []
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "locationDefine": {
+            "values": {
+              "headerRow": 1
+            }
+          }
+        },
+        "handlingExtraData": "ignoreIt"
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "lg3xGqfjK0ww5R7Y",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "id": "fd5b5697-10b7-44a1-b297-f633370e8ea4",
+      "name": "Manual Idea Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ee9723ae-485d-4b67-ad1c-426e69647409",
+      "name": "Sticky Note f4f21c4a",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        448,
+        256
+      ],
+      "parameters": {
+        "content": {
+          "config": {
+            "name": "v2 Rule",
+            "parameters": {
+              "content": "RAIZ Weekly Idea Autopilot writes production rows automatically. VIDEOS_MASTER is not a human input screen.",
+              "height": 220,
+              "width": 620,
+              "color": 4
+            }
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Weekly Idea Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Autopilot Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Autopilot Brief": {
+      "main": [
+        [
+          {
+            "node": "Gemini Weekly Idea Scout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Weekly Idea Scout": {
+      "main": [
+        [
+          {
+            "node": "Build VIDEOS_MASTER Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build VIDEOS_MASTER Rows": {
+      "main": [
+        [
+          {
+            "node": "Append Rows To VIDEOS_MASTER",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Idea Run": {
+      "main": [
+        [
+          {
+            "node": "Build Autopilot Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp"
+  }
+}
