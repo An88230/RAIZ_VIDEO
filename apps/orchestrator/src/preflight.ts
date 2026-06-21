@@ -155,10 +155,22 @@ function buildVoiceChecks(job: RaizJob, renderPlan: RenderPlan): PreflightCheck[
   }
 
   // TTS providers (edge_tts, elevenlabs, azure) need a provider and a voice name.
-  return [
+  const checks = [
     errorCheck("voice_provider_exists", Boolean(renderPlan.voice.provider?.trim()), "Voice provider exists."),
     errorCheck("voice_name_exists", Boolean(renderPlan.voice.voice_name?.trim()), "Voice name exists.")
   ];
+
+  if (isSchemaSupportedTtsProvider(voiceType)) {
+    checks.push(
+      warningCheck(
+        "voice_provider_not_implemented_locally",
+        false,
+        "This voice provider is schema-supported but not implemented in local render v1. Local render requires external voice generation or fallback."
+      )
+    );
+  }
+
+  return checks;
 }
 
 function errorCheck(name: string, passed: boolean, message: string): PreflightCheck {
@@ -167,6 +179,10 @@ function errorCheck(name: string, passed: boolean, message: string): PreflightCh
 
 function warningCheck(name: string, passed: boolean, message: string): PreflightCheck {
   return { name, passed, severity: "warning", message };
+}
+
+function isSchemaSupportedTtsProvider(voiceType: string): boolean {
+  return voiceType === "edge_tts" || voiceType === "elevenlabs" || voiceType === "azure";
 }
 
 function hasDeclaredAsset(job: RaizJob, renderPlan: RenderPlan): boolean {

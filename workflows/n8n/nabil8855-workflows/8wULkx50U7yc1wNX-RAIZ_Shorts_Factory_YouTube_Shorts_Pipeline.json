@@ -124,7 +124,7 @@
             {
               "id": "next",
               "name": "nextStep",
-              "value": "Add render API URL, add YouTube OAuth2 credential, enable disabled media nodes, then test manually.",
+              "value": "Add render API URL, add YouTube OAuth2 runtime connection, enable disabled media nodes, then test manually.",
               "type": "string"
             }
           ]
@@ -176,7 +176,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const sources = {\n  googleSheet: {\n    name: 'RAIZ Video Factory Control Sheet v1',\n    spreadsheetId: '1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE',\n    url: 'https://docs.google.com/spreadsheets/d/1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE/edit?usp=drivesdk',\n    primarySheet: 'VIDEOS_MASTER',\n    docsLibrarySheet: 'DOCS_LIBRARY',\n    readyRule: 'main_status=APPROVED AND n8n_lock=FALSE'\n  },\n  googleDoc: {\n    name: 'RAIZ Video Factory Master Context',\n    documentId: '1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4',\n    url: 'https://docs.google.com/document/d/1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4/edit?usp=drivesdk',\n    docType: 'PROJECT_CONTEXT',\n    usage: 'Master context used before script, captions, visual plan, and render payload generation.'\n  },\n  note: 'Google OAuth credentials are still required before n8n can read Sheets/Docs directly.'\n};\n\nreturn $input.all().map((item) => ({\n  json: {\n    ...item.json,\n    raizSources: sources\n  }\n}));"
+        "jsCode": "const sources = {\n  googleSheet: {\n    name: 'RAIZ Video Factory Control Sheet v1',\n    spreadsheetId: '1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE',\n    url: 'https://docs.google.com/spreadsheets/d/1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE/edit?usp=drivesdk',\n    primarySheet: 'VIDEOS_MASTER',\n    docsLibrarySheet: 'DOCS_LIBRARY',\n    readyRule: 'main_status=APPROVED AND n8n_lock=FALSE'\n  },\n  googleDoc: {\n    name: 'RAIZ Video Factory Master Context',\n    documentId: '1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4',\n    url: 'https://docs.google.com/document/d/1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4/edit?usp=drivesdk',\n    docType: 'PROJECT_CONTEXT',\n    usage: 'Master context used before script, captions, visual plan, and render payload generation.'\n  },\n  note: 'Google OAuth runtime connection are still required before n8n can read Sheets/Docs directly.'\n};\n\nreturn $input.all().map((item) => ({\n  json: {\n    ...item.json,\n    raizSources: sources\n  }\n}));"
       },
       "id": "d27a9114-217e-48d7-ae19-ea5ef4720d2b",
       "name": "RAIZ Google Sources Config",
@@ -189,7 +189,7 @@
     },
     {
       "parameters": {
-        "content": "## Google Sources مثبتة داخل الماكينة\n\nGoogle Sheet:\n`1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE`\n\nPrimary table:\n`VIDEOS_MASTER`\n\nReady rule:\n`main_status=APPROVED` + `n8n_lock=FALSE`\n\nGoogle Doc / Master Context:\n`1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4`\n\nمهم: القراءة الفعلية من Google تحتاج Google Sheets/Docs OAuth Credential داخل n8n. حاليًا الموجود فقط OpenAI credential.",
+        "content": "## Google Sources مثبتة داخل الماكينة\n\nGoogle Sheet:\n`1feNLjbK6jfYVAz6wofPIawwcth8BTLK-cvxu30zZAvE`\n\nPrimary table:\n`VIDEOS_MASTER`\n\nReady rule:\n`main_status=APPROVED` + `n8n_lock=FALSE`\n\nGoogle Doc / Master Context:\n`1y5YBKIYTQo15sI_ts-Wu8x59aJLoE7qxNV0vBp0Vwz4`\n\nمهم: القراءة الفعلية من Google تحتاج Google Sheets/Docs OAuth runtime connection داخل n8n. حاليًا الموجود فقط OpenAI runtime connection.",
         "height": 340,
         "width": 1048,
         "color": 4
@@ -241,13 +241,7 @@
       "position": [
         560,
         160
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -274,13 +268,7 @@
       "position": [
         1104,
         160
-      ],
-      "credentials": {
-        "googleDocsOAuth2Api": {
-          "id": "ZsvQYsPlld1OAWTi",
-          "name": "Google Docs account"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -400,13 +388,7 @@
       "position": [
         1264,
         -176
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -442,7 +424,6 @@
         },
         "builtInTools": {},
         "options": {
-          "maxTokens": 1600,
           "textFormat": {
             "textOptions": {
               "type": "json_object"
@@ -458,13 +439,7 @@
       "position": [
         1888,
         160
-      ],
-      "credentials": {
-        "openAiApi": {
-          "id": "Q1wSE6qLMuwwTEAu",
-          "name": "n8n free OpenAI API credits"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -662,13 +637,7 @@
       "position": [
         2608,
         160
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -802,13 +771,7 @@
       "position": [
         3088,
         160
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -1011,13 +974,7 @@
       "position": [
         3568,
         160
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -1043,7 +1000,6 @@
         "options": {
           "includeMergedResponse": true,
           "systemMessage": "You are RAIZ Video Factory quality reviewer. Return valid JSON only.",
-          "maxOutputTokens": 800,
           "temperature": 0.2,
           "thinkingBudget": 0
         }
@@ -1056,17 +1012,11 @@
         2128,
         560
       ],
-      "credentials": {
-        "googlePalmApi": {
-          "id": "ROemEXw2v0XAXmqD",
-          "name": "Google Gemini(PaLM) Api account"
-        }
-      },
       "disabled": true
     },
     {
       "parameters": {
-        "content": "## Gemini + Google Tasks جاهزين\n\nCredentials ظهرت:\n- Google Gemini(PaLM) Api account\n- Google Tasks account\n\nالاستخدام الصحيح:\n1. Gemini = مراجعة جودة السكربت أو بديل توليد عند فشل OpenAI.\n2. Google Tasks = إنشاء مهمة مراجعة بشرية بعد SCRIPT_READY عندما `human_review_required=true`.\n\nتمت إضافة Gemini Script Review Placeholder كعقدة Disabled حتى لا تضيف تكلفة أو تغيّر المسار الناجح.\n\nGoogle Tasks يحتاج اختيار Task List من واجهة n8n قبل التفعيل.",
+        "content": "## Gemini + Google Tasks جاهزين\n\nruntime connection ظهرت:\n- Google Gemini(PaLM) Api account\n- Google Tasks account\n\nالاستخدام الصحيح:\n1. Gemini = مراجعة جودة السكربت أو بديل توليد عند فشل OpenAI.\n2. Google Tasks = إنشاء مهمة مراجعة بشرية بعد SCRIPT_READY عندما `human_review_required=true`.\n\nتمت إضافة Gemini Script Review Placeholder كعقدة Disabled حتى لا تضيف تكلفة أو تغيّر المسار الناجح.\n\nGoogle Tasks يحتاج اختيار Task List من واجهة n8n قبل التفعيل.",
         "height": 300,
         "width": 720,
         "color": 5
@@ -1110,13 +1060,7 @@
       "position": [
         512,
         -80
-      ],
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
-      }
+      ]
     },
     {
       "parameters": {

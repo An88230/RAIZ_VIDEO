@@ -66,12 +66,6 @@
             }
           }
         }
-      },
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
       }
     },
     {
@@ -84,7 +78,7 @@
         96
       ],
       "parameters": {
-        "jsCode": "return $input.all().map(item => ({ json: {\n  video_id: item.json.video_id,\n  youtube_url: item.json.youtube_url || '',\n  analytics_required: true,\n  message: 'YouTube Analytics credential is not configured yet. Add YouTube/Data API credential before enabling analytics fetch.',\n  next_target: 'ANALYTICS sheet and AUTOPILOT_CONFIG feedback'\n}}));"
+        "jsCode": "return $input.all().map(item => ({ json: {\n  video_id: item.json.video_id,\n  youtube_url: item.json.youtube_url || '',\n  analytics_required: true,\n  message: 'YouTube Analytics runtime connection is not configured yet. Add YouTube/Data API runtime connection before enabling analytics fetch.',\n  next_target: 'ANALYTICS sheet and AUTOPILOT_CONFIG feedback'\n}}));"
       }
     },
     {

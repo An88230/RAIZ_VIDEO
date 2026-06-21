@@ -57,12 +57,6 @@
             }
           }
         }
-      },
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
       }
     },
     {

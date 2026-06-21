@@ -36,12 +36,6 @@
           "rightToLeft": false,
           "tabColor": "0aa55c"
         }
-      },
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
       }
     },
     {
@@ -142,12 +136,6 @@
           },
           "handlingExtraData": "insertInNewColumn"
         }
-      },
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
       }
     },
     {
@@ -173,12 +161,6 @@
         "options": {
           "rightToLeft": false,
           "tabColor": "fbbc04"
-        }
-      },
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
         }
       }
     },
@@ -277,12 +259,6 @@
           },
           "handlingExtraData": "insertInNewColumn"
         }
-      },
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
       }
     },
     {
@@ -308,12 +284,6 @@
         "options": {
           "rightToLeft": true,
           "tabColor": "a142f4"
-        }
-      },
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
         }
       }
     },
@@ -411,12 +381,6 @@
             }
           },
           "handlingExtraData": "insertInNewColumn"
-        }
-      },
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
         }
       }
     }

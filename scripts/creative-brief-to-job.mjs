@@ -49,7 +49,13 @@ export function convertCreativeBriefToJob(brief) {
     },
     voice: brief.voice ?? defaultVoice,
     assets: {
-      broll_source: brollSearchTerms.length > 0 ? "pexels" : "none"
+      broll_source: brollSearchTerms.length > 0 ? "pexels" : "none",
+      ...(brollSearchTerms.length > 0
+        ? {
+            search_terms: brollSearchTerms,
+            broll_count: Math.min(3, brollSearchTerms.length)
+          }
+        : {})
     },
     captions: {
       enabled: true,

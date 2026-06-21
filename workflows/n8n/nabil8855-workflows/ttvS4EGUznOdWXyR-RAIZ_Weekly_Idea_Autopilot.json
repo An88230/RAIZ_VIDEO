@@ -75,15 +75,8 @@
         "options": {
           "includeMergedResponse": true,
           "systemMessage": "Return valid JSON only. Generate original Arabic-first ideas for vertical Shorts.",
-          "maxOutputTokens": 2200,
           "temperature": 0.55,
           "thinkingBudget": 0
-        }
-      },
-      "credentials": {
-        "googlePalmApi": {
-          "id": "ROemEXw2v0XAXmqD",
-          "name": "Google Gemini(PaLM) Api account"
         }
       }
     },
@@ -139,12 +132,6 @@
           }
         },
         "handlingExtraData": "ignoreIt"
-      },
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
       }
     },
     {

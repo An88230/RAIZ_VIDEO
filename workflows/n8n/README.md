@@ -13,8 +13,10 @@ but importable workflow JSON belongs here.
 
 ## Safety Boundary
 
-- These files are exported/reference workflow artifacts.
-- They must not contain secrets, credentials, or API keys.
+- These files are sanitized exported/reference workflow artifacts.
+- Credential bindings are intentionally removed before committing exports.
+- n8n Cloud or another n8n runtime must re-bind credentials after import.
+- Never commit API keys, tokens, passwords, secrets, or credential references.
 - RAIZ_VIDEO does not start n8n from this repository.
 - Any real execution happens in n8n Cloud or another external n8n runtime.
 - Workflow execution remains separate from local RAIZ tests and builds.

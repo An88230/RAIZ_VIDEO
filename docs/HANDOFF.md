@@ -35,6 +35,9 @@ The current stable foundation is documented and reviewed:
 - The project state and next phases are documented in
   [PROJECT_STATE_AND_NEXT_PHASES.md](PROJECT_STATE_AND_NEXT_PHASES.md).
 - Known open risks are tracked in [OPEN_GAPS.md](OPEN_GAPS.md).
+- Near-term safety work closed the local bind/auth exposure, sanitized n8n
+  workflow exports, restored Creative OS b-roll search terms, and made voice
+  preflight warnings truthful for unsupported local TTS providers.
 
 ## 3. Current problem
 

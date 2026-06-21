@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -65,7 +65,13 @@ try {
   }
 
   const expectedSearchTerm = sample.beats[0].broll_search_terms[0];
-  if (job.assets?.broll_source !== "pexels" || !job.publish?.tags?.includes(expectedSearchTerm)) {
+  if (
+    job.assets?.broll_source !== "pexels" ||
+    !job.assets?.search_terms?.includes(expectedSearchTerm) ||
+    job.assets?.broll_count !== 3 ||
+    job.assets.broll_count > 3 ||
+    !job.publish?.tags?.includes(expectedSearchTerm)
+  ) {
     throw new Error("Expected b-roll search terms to map into job asset intent and publish tags.");
   }
 
@@ -78,6 +84,40 @@ try {
     !editingPlan.broll_search_terms?.includes(expectedSearchTerm)
   ) {
     throw new Error("Expected editing_plan.json to preserve Creative OS visual intent and safety flags.");
+  }
+
+  const noTermsSample = {
+    ...sample,
+    job_id: `${sample.job_id}-no-terms`,
+    beats: sample.beats.map((beat) => ({ ...beat, broll_search_terms: [] }))
+  };
+  const noTermsSamplePath = resolve(tempStorage, "creative-brief-no-broll-terms.json");
+
+  writeFileSync(noTermsSamplePath, `${JSON.stringify(noTermsSample, null, 2)}\n`);
+
+  const noTermsResult = spawnSync(
+    process.execPath,
+    [converterPath, `--brief=${noTermsSamplePath}`, `--storage=${tempStorage}`],
+    {
+      cwd: repoRoot,
+      encoding: "utf8"
+    }
+  );
+
+  if (noTermsResult.status !== 0) {
+    console.error(noTermsResult.stdout);
+    console.error(noTermsResult.stderr);
+    throw new Error(`creative-brief-to-job.mjs no-terms conversion failed with exit code ${noTermsResult.status}.`);
+  }
+
+  const noTermsJob = readJson(resolve(tempStorage, noTermsSample.job_id, "job.json"));
+
+  if (
+    noTermsJob.assets?.broll_source !== "none" ||
+    "search_terms" in noTermsJob.assets ||
+    "broll_count" in noTermsJob.assets
+  ) {
+    throw new Error("Expected creative brief without b-roll terms to keep broll_source none.");
   }
 
   console.log(`Validated Creative OS bridge conversion: ${sample.job_id}`);

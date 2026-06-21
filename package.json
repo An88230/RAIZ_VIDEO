@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "test": "node scripts/creative-brief-to-job.test.mjs && node scripts/creative-os-local-agent-contract.test.mjs && node scripts/render-arabic-local-voice.test.mjs && node scripts/fetch-pexels-broll.test.mjs && npm run test --workspaces --if-present",
+    "test": "node scripts/n8n-workflow-export-safety.test.mjs && node scripts/creative-brief-to-job.test.mjs && node scripts/creative-os-local-agent-contract.test.mjs && node scripts/render-arabic-local-voice.test.mjs && node scripts/fetch-pexels-broll.test.mjs && npm run test --workspaces --if-present",
     "dev:orchestrator": "npm --workspace @raiz/orchestrator run dev",
     "raiz:local-pipeline": "bash scripts/run-local-pipeline.sh",
     "raiz:render-arabic": "node scripts/render-arabic-local.mjs",

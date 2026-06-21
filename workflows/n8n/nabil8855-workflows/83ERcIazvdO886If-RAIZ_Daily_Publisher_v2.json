@@ -77,12 +77,6 @@
             }
           }
         }
-      },
-      "credentials": {
-        "googleSheetsOAuth2Api": {
-          "id": "lg3xGqfjK0ww5R7Y",
-          "name": "Google Sheets account"
-        }
       }
     },
     {
@@ -95,7 +89,7 @@
         96
       ],
       "parameters": {
-        "jsCode": "const rows = $input.all().map(i => i.json);\nconst unlocked = v => v === false || v === 0 || v === '' || v === null || String(v).trim().toUpperCase() === 'FALSE';\nconst ready = rows\n  .filter(r => String(r.main_status || '').trim().toUpperCase() === 'RENDERED')\n  .filter(r => unlocked(r.n8n_lock))\n  .sort((a,b) => Number(a.priority || 999) - Number(b.priority || 999));\nif (!ready.length) return [];\nreturn [{ json: { ...ready[0], next_stage: 'PUBLISH', youtube_credential_required: true } }];"
+        "jsCode": "const rows = $input.all().map(i => i.json);\nconst unlocked = v => v === false || v === 0 || v === '' || v === null || String(v).trim().toUpperCase() === 'FALSE';\nconst ready = rows\n  .filter(r => String(r.main_status || '').trim().toUpperCase() === 'RENDERED')\n  .filter(r => unlocked(r.n8n_lock))\n  .sort((a,b) => Number(a.priority || 999) - Number(b.priority || 999));\nif (!ready.length) return [];\nreturn [{ json: { ...ready[0], next_stage: 'PUBLISH', youtube_runtime connection_required: true } }];"
       }
     },
     {
@@ -108,7 +102,7 @@
         96
       ],
       "parameters": {
-        "jsCode": "return $input.all().map(item => ({ json: {\n  video_id: item.json.video_id,\n  final_video_url: item.json.final_video_url || '',\n  youtube_upload_required: true,\n  message: 'YouTube OAuth is not configured yet. Add YouTube credential before enabling upload.',\n  intended_privacy_status: 'private',\n  next_update: 'VIDEOS_MASTER main_status=UPLOADED and PUBLISHING row after upload'\n}}));"
+        "jsCode": "return $input.all().map(item => ({ json: {\n  video_id: item.json.video_id,\n  final_video_url: item.json.final_video_url || '',\n  youtube_upload_required: true,\n  message: 'YouTube OAuth is not configured yet. Add YouTube runtime connection before enabling upload.',\n  intended_privacy_status: 'private',\n  next_update: 'VIDEOS_MASTER main_status=UPLOADED and PUBLISHING row after upload'\n}}));"
       }
     },
     {

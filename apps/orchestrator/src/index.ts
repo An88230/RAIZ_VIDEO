@@ -1,7 +1,7 @@
 import { createServer } from "./server.js";
+import { resolveOrchestratorListenConfig } from "./envConfig.js";
 
-const port = Number(process.env.PORT ?? 4000);
-const host = process.env.HOST ?? "0.0.0.0";
+const { port, host } = resolveOrchestratorListenConfig();
 const server = createServer({ logger: true });
 
 await server.listen({ port, host });

@@ -38,7 +38,7 @@ else
 fi
 
 export PORT="${PORT:-4000}"
-export HOST="${HOST:-0.0.0.0}"
+export HOST="${HOST:-127.0.0.1}"
 export RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH="${RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH:-$REPO_ROOT/vendor/short-video-maker}"
 export RAIZ_STORAGE_DIR="${RAIZ_STORAGE_DIR:-$REPO_ROOT/storage/jobs}"
 
@@ -65,6 +65,7 @@ echo "  # curl ${RAIZ_SHORT_VIDEO_MAKER_BASE_URL:-http://127.0.0.1:3123}/health"
 echo
 echo "Safety:"
 echo "  This starts RAIZ only."
+echo "  It binds to localhost by default."
 echo "  It does not start vendor/short-video-maker."
 echo "  It does not start Docker."
 echo "  It does not call external network services."

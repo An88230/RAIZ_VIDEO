@@ -3,7 +3,7 @@ import { validateRaizJob } from "@raiz/job-schema";
 import { remotionDirectAdapter, shortVideoMakerAdapter } from "@raiz/render-adapters";
 import { resolve } from "node:path";
 
-import { loadEnvConfig } from "./envConfig.js";
+import { loadApiAuthConfig, loadEnvConfig } from "./envConfig.js";
 import { getExecutionGuard } from "./executionGuard.js";
 import { createFetchHttpClient } from "./httpClient.js";
 import { inspectJobArtifacts } from "./artifactInspector.js";
@@ -109,6 +109,7 @@ export interface CreateServerOptions {
   shortVideoMakerVendorPath?: string;
   shortVideoMakerHttpClient?: HttpClient;
   remotionRenderer?: RemotionRenderer;
+  apiToken?: string | null;
 }
 
 // remotion_direct is the Arabic-first v1 engine, so it leads the list and is the
@@ -134,14 +135,28 @@ function getShortVideoMakerVendorPath(options: CreateServerOptions): string {
   return resolve(options.shortVideoMakerVendorPath ?? loadEnvConfig().shortVideoMakerVendorPath);
 }
 
-function getSafeConfigView() {
+function getSafeConfigView(apiAuthEnabled: boolean) {
   const config = loadEnvConfig();
 
   return {
     ...config,
+    apiAuthEnabled,
     safe_defaults: true,
     real_execution_blocked_by_default: true
   };
+}
+
+function getServerApiAuthConfig(options: CreateServerOptions) {
+  if (options.apiToken !== undefined) {
+    const apiToken = options.apiToken?.trim() || null;
+
+    return {
+      apiAuthEnabled: Boolean(apiToken),
+      apiToken
+    };
+  }
+
+  return loadApiAuthConfig();
 }
 
 interface PatchJobStatusBody {
@@ -158,6 +173,26 @@ interface ManualReviewBody {
 
 export function createServer(options: CreateServerOptions = {}): FastifyInstance {
   const server = Fastify({ logger: options.logger ?? false });
+  const apiAuth = getServerApiAuthConfig(options);
+
+  server.addHook("onRequest", async (request, reply) => {
+    if (!apiAuth.apiAuthEnabled) {
+      return;
+    }
+
+    if (request.method === "GET" && request.url.split("?")[0] === "/health") {
+      return;
+    }
+
+    const requestToken = request.headers["x-raiz-api-token"];
+
+    if (requestToken !== apiAuth.apiToken) {
+      return reply.code(401).send({
+        status: "unauthorized",
+        error: "Missing or invalid RAIZ API token."
+      });
+    }
+  });
 
   server.get("/adapters/short-video-maker/health", async () => {
     return shortVideoMakerAdapter.checkHealth?.({
@@ -170,7 +205,7 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
   });
 
   server.get("/system/config", async () => {
-    return getSafeConfigView();
+    return getSafeConfigView(apiAuth.apiAuthEnabled);
   });
 
   server.get("/health", async () => {

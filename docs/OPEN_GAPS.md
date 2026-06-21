@@ -15,15 +15,16 @@ inside the next phase · **Low** = polish / hardening backlog.
 
 | ID | Severity | Gap | Status |
 |----|----------|-----|--------|
-| GAP-01 | High | Orchestrator binds `0.0.0.0` with no authentication | Open |
-| GAP-02 | Medium | Creative OS → Pexels seam is broken (bridge drops `search_terms`) | Open |
+| GAP-01 | High | Orchestrator binds `0.0.0.0` with no authentication | Fixed |
+| GAP-02 | Medium | Creative OS → Pexels seam is broken (bridge drops `search_terms`) | Fixed |
 | GAP-03 | Medium | No CI gate (build/test run manually only) | Open |
-| GAP-04 | Medium | Preflight reports `passed` for unimplemented voice providers | Open |
+| GAP-04 | Medium | Preflight reports `passed` for unimplemented voice providers | Fixed |
 | GAP-05 | Low | HTTP client has no response size cap and an optional timeout | Open |
 | GAP-06 | Low | `PATCH /jobs/:id/status` allows manual state hops past guarded flows | Open |
 | GAP-07 | Low | Job schema has no upper bounds on `broll_count` / `search_terms` | Open |
 | GAP-08 | Low | Brief→job bridge defaults to an unimplemented `edge_tts` voice | Open |
 | GAP-09 | Medium | Gemini TTS native audio (official render voice) is contract-only and unwired | In progress |
+| GAP-10 | High | n8n workflow exports include credential references | Fixed |
 
 ---
 
@@ -43,6 +44,10 @@ inside the next phase · **Low** = polish / hardening backlog.
   so it must be safe on its own.
 - **Suggested fix:** default `HOST` to `127.0.0.1`; require explicit opt-in for
   `0.0.0.0`. Optionally add a local shared-secret header check. Add a test.
+- **Closure:** Fixed. The orchestrator now defaults to `127.0.0.1`, rejects
+  non-loopback bind unless `RAIZ_ALLOW_NETWORK_BIND=true` and `RAIZ_API_TOKEN`
+  are set, and requires `x-raiz-api-token` on all routes except `GET /health`
+  when auth is enabled.
 
 ## GAP-02 (Medium) — Creative OS → Pexels seam is broken
 
@@ -65,6 +70,9 @@ inside the next phase · **Low** = polish / hardening backlog.
 - **Suggested fix:** in `convertCreativeBriefToJob`, write
   `search_terms: brollSearchTerms` (and a bounded `broll_count`) into `assets`
   when terms exist; add a bridge-test assertion on `assets.search_terms`.
+- **Closure:** Fixed. Creative OS bridge output now carries b-roll terms into
+  `assets.search_terms`, writes a capped `assets.broll_count`, and keeps
+  `broll_source: "none"` when no terms exist.
 
 ## GAP-03 (Medium) — No CI gate
 
@@ -89,6 +97,9 @@ inside the next phase · **Low** = polish / hardening backlog.
   which conflicts with the project's "must stay truthful" rule.
 - **Suggested fix:** add a warning-level preflight check when the requested voice
   provider is not implemented in local render v1.
+- **Closure:** Fixed. Preflight now emits a warning for `edge_tts`, `elevenlabs`,
+  and `azure` when required fields are present, while preserving existing failure
+  behavior for missing provider or voice name.
 
 ## GAP-05 (Low) — HTTP client: no response size cap, optional timeout
 
@@ -167,6 +178,23 @@ inside the next phase · **Low** = polish / hardening backlog.
   design input.
 - **Status:** In progress (external prototype); not integrated in RAIZ.
 
+## GAP-10 (High) — n8n workflow exports include credential references
+
+- **Where:** `workflows/n8n/nabil8855-workflows/*.json` contained n8n
+  `credentials` blocks and credential ids/names from the source n8n runtime.
+- **Why it is undocumented:** the n8n exports were organized into the repository
+  after this gap register was first written, and the README policy said exports
+  must not contain credentials.
+- **Impact:** these were not raw API keys, but source-controlled credential
+  bindings are still unsafe reference metadata and can create confusion about
+  what is portable or secret-bearing.
+- **Suggested fix:** remove credential bindings from repository exports and add a
+  guard test that fails on `credentials`, `apiKey`, `secret`, `password`, or
+  `token` inside workflow JSON files.
+- **Closure:** Fixed. n8n workflow exports are sanitized, runtime credential
+  binding is documented as an n8n Cloud/runtime responsibility, and a workflow
+  export safety test is part of `npm test`.
+
 ---
 
 ## Already tracked elsewhere (intentionally not repeated here)
@@ -184,10 +212,8 @@ These are real, but already recorded in
 
 ## Recommended order
 
-1. GAP-01 (close the exposure before any UI or agent work).
-2. GAP-02 (restore the Pexels seam — it disables a feature marked stable).
-3. GAP-03, GAP-04 (CI gate + truthful preflight) alongside Phase 35.
-4. GAP-09 (production Gemini native-audio voice layer) — the real fix behind
+1. GAP-03 (add the CI gate so build/test stop being manual-only).
+2. GAP-09 (production Gemini native-audio voice layer) — the real fix behind
    GAP-04 and GAP-08; sequence it with the "production voice layer" step in
    PROJECT_STATE.
-5. GAP-05 through GAP-08 (hardening backlog).
+3. GAP-05 through GAP-08 (hardening backlog).

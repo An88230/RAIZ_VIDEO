@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { EnvConfigError, loadEnvConfig } from "./envConfig.js";
+import { EnvConfigError, loadEnvConfig, resolveOrchestratorListenConfig } from "./envConfig.js";
 import {
   assertRealRenderAllowed,
   getExecutionGuard,
@@ -14,6 +14,10 @@ import { sendShortVideoMakerWithMockedHttp, type HttpClient } from "./shortVideo
 import { type RemotionRenderer } from "./remotionDirectRender.js";
 
 const managedEnvKeys = [
+  "HOST",
+  "PORT",
+  "RAIZ_ALLOW_NETWORK_BIND",
+  "RAIZ_API_TOKEN",
   "RAIZ_ENABLE_REAL_RENDER",
   "RAIZ_SHORT_VIDEO_MAKER_MODE",
   "RAIZ_SHORT_VIDEO_MAKER_BASE_URL",
@@ -95,6 +99,7 @@ const server = createServer({
 });
 
 const defaultEnvConfig = loadEnvConfig();
+const defaultListenConfig = resolveOrchestratorListenConfig();
 
 if (
   defaultEnvConfig.realRenderEnabled !== false ||
@@ -106,6 +111,69 @@ if (
   defaultEnvConfig.storageDir !== "storage/jobs"
 ) {
   throw new Error("Expected env config defaults to be safe.");
+}
+
+if (
+  defaultListenConfig.host !== "127.0.0.1" ||
+  defaultListenConfig.port !== 4000 ||
+  defaultListenConfig.allowNetworkBind !== false ||
+  defaultListenConfig.apiAuthEnabled !== false
+) {
+  throw new Error("Expected orchestrator listen config defaults to bind localhost without API auth.");
+}
+
+let networkBindRejected = false;
+
+try {
+  resolveOrchestratorListenConfig({
+    ...process.env,
+    HOST: "0.0.0.0"
+  });
+} catch (error) {
+  if (error instanceof EnvConfigError) {
+    networkBindRejected = true;
+  } else {
+    throw error;
+  }
+}
+
+if (!networkBindRejected) {
+  throw new Error("Expected non-loopback bind without RAIZ_ALLOW_NETWORK_BIND=true to throw EnvConfigError.");
+}
+
+let missingNetworkTokenRejected = false;
+
+try {
+  resolveOrchestratorListenConfig({
+    ...process.env,
+    HOST: "0.0.0.0",
+    RAIZ_ALLOW_NETWORK_BIND: "true"
+  });
+} catch (error) {
+  if (error instanceof EnvConfigError) {
+    missingNetworkTokenRejected = true;
+  } else {
+    throw error;
+  }
+}
+
+if (!missingNetworkTokenRejected) {
+  throw new Error("Expected network bind with allow but without RAIZ_API_TOKEN to throw EnvConfigError.");
+}
+
+const allowedNetworkBind = resolveOrchestratorListenConfig({
+  ...process.env,
+  HOST: "0.0.0.0",
+  RAIZ_ALLOW_NETWORK_BIND: "true",
+  RAIZ_API_TOKEN: "test-token"
+});
+
+if (
+  allowedNetworkBind.host !== "0.0.0.0" ||
+  allowedNetworkBind.allowNetworkBind !== true ||
+  allowedNetworkBind.apiAuthEnabled !== true
+) {
+  throw new Error("Expected explicit network bind with API token to be allowed.");
 }
 
 const defaultExecutionGuard = getExecutionGuard();
@@ -526,6 +594,8 @@ const configBody = JSON.parse(configResponse.body) as {
   shortVideoMakerTimeoutMs?: number;
   shortVideoMakerVendorPath?: string;
   storageDir?: string;
+  apiAuthEnabled?: boolean;
+  apiToken?: string;
   safe_defaults?: boolean;
   real_execution_blocked_by_default?: boolean;
 };
@@ -538,10 +608,57 @@ if (
   configBody.shortVideoMakerTimeoutMs !== 120000 ||
   configBody.shortVideoMakerVendorPath !== "vendor/short-video-maker" ||
   configBody.storageDir !== "storage/jobs" ||
+  configBody.apiAuthEnabled !== false ||
+  "apiToken" in configBody ||
   configBody.safe_defaults !== true ||
   configBody.real_execution_blocked_by_default !== true
 ) {
   throw new Error("Expected system config endpoint to return safe config view.");
+}
+
+const authStorageRoot = mkdtempSync(resolve(tmpdir(), "raiz-orchestrator-auth-test-"));
+const authServer = createServer({ storageRoot: authStorageRoot, apiToken: "secret-token" });
+
+try {
+  const publicHealth = await authServer.inject({ method: "GET", url: "/health" });
+
+  if (publicHealth.statusCode !== 200) {
+    throw new Error(`Expected /health to remain public with API auth enabled, got ${publicHealth.statusCode}.`);
+  }
+
+  const missingToken = await authServer.inject({ method: "GET", url: "/system/config" });
+
+  if (missingToken.statusCode !== 401) {
+    throw new Error(`Expected missing API token to return 401, got ${missingToken.statusCode}.`);
+  }
+
+  const wrongToken = await authServer.inject({
+    method: "GET",
+    url: "/system/config",
+    headers: { "x-raiz-api-token": "wrong-token" }
+  });
+
+  if (wrongToken.statusCode !== 401) {
+    throw new Error(`Expected wrong API token to return 401, got ${wrongToken.statusCode}.`);
+  }
+
+  const correctToken = await authServer.inject({
+    method: "GET",
+    url: "/system/config",
+    headers: { "x-raiz-api-token": "secret-token" }
+  });
+
+  if (correctToken.statusCode !== 200) {
+    throw new Error(`Expected correct API token to return 200, got ${correctToken.statusCode}.`);
+  }
+
+  const correctTokenBody = JSON.parse(correctToken.body) as { apiAuthEnabled?: boolean; apiToken?: string };
+
+  if (correctTokenBody.apiAuthEnabled !== true || "apiToken" in correctTokenBody) {
+    throw new Error("Expected authenticated config view to expose apiAuthEnabled without token value.");
+  }
+} finally {
+  rmSync(authStorageRoot, { recursive: true, force: true });
 }
 
 const renderResponse = await server.inject({
@@ -3629,6 +3746,36 @@ const ttsMissingReport = JSON.parse(await prepareAndPreflight("voice-tts-missing
 
 if (ttsMissingReport.status !== "failed") {
   throw new Error("Expected edge_tts without provider/voice_name to fail preflight.");
+}
+
+const edgeTtsWarningReport = JSON.parse(
+  await prepareAndPreflight("voice-edge-tts-warning-001", {
+    type: "edge_tts",
+    provider: "edge",
+    voice_name: "ar-SA-HamedNeural"
+  })
+) as {
+  status?: string;
+  warnings?: string[];
+  checks?: Array<{ name?: string; severity?: string; passed?: boolean; message?: string }>;
+};
+
+if (edgeTtsWarningReport.status !== "passed") {
+  throw new Error("Expected edge_tts with provider and voice_name to pass preflight.");
+}
+
+if (
+  !edgeTtsWarningReport.warnings?.some((warning) =>
+    warning.includes("schema-supported but not implemented in local render v1")
+  ) ||
+  !edgeTtsWarningReport.checks?.some(
+    (check) =>
+      check.name === "voice_provider_not_implemented_locally" &&
+      check.severity === "warning" &&
+      check.passed === false
+  )
+) {
+  throw new Error("Expected edge_tts with provider and voice_name to pass with unsupported-local-provider warning.");
 }
 
 // --- C1: upstream {scenes, config} request endpoint ------------------------
