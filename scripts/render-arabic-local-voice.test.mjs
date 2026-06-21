@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { resolveBrollPlan, resolveLocalRenderSupportPlan, resolveVoicePlan } from "./render-arabic-local.mjs";
+import { maskUrl, resolveBrollPlan, resolveLocalRenderSupportPlan, resolveVoicePlan } from "./render-arabic-local.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const scriptPath = resolve(repoRoot, "scripts/render-arabic-local.mjs");
@@ -35,9 +35,13 @@ try {
     !dryCheck.stderr.includes("[voice][warning]") ||
     !dryCheck.stderr.includes('voice.type="edge_tts"') ||
     !dryCheck.stderr.includes("not implemented") ||
-    !dryCheck.stderr.includes("macOS say")
+    !dryCheck.stderr.includes("rendering without narration audio")
   ) {
-    throw new Error("Expected edge_tts dry voice check to print an explicit macOS say fallback warning.");
+    throw new Error("Expected edge_tts dry voice check to print an explicit silent-render warning.");
+  }
+
+  if (!dryCheck.stdout.includes("[voice] dry check source: no_external_audio")) {
+    throw new Error("Expected edge_tts dry voice check to use no_external_audio.");
   }
 
   for (const expectedWarning of [
@@ -80,10 +84,31 @@ try {
   );
 
   if (
-    missingExternalPlan.source !== "macos_say_fallback" ||
-    !missingExternalPlan.warnings.some((warning) => warning.includes("was not found") && warning.includes("macOS say"))
+    missingExternalPlan.source !== "no_external_audio" ||
+    !missingExternalPlan.warnings.some((warning) => warning.includes("was not found") && warning.includes("without narration audio"))
   ) {
-    throw new Error("Expected missing external_file voice to warn before macOS say fallback.");
+    throw new Error("Expected missing external_file voice to warn before silent render.");
+  }
+
+  const externalUrl = "https://gemini.example.test/audio.wav?token=secret-token&signature=secret-signature";
+  const externalUrlPlan = resolveVoicePlan({
+    voice: {
+      type: "external_file",
+      audio_url: externalUrl
+    }
+  });
+
+  if (
+    externalUrlPlan.source !== "external_url" ||
+    externalUrlPlan.externalUrl !== externalUrl ||
+    externalUrlPlan.externalUrlMasked !== "https://gemini.example.test/audio.wav?__redacted__=true" ||
+    externalUrlPlan.warnings.length !== 0
+  ) {
+    throw new Error("Expected external audio URL voice plan to preserve runtime URL and expose only a masked URL.");
+  }
+
+  if (maskUrl(externalUrl).includes("secret-token") || maskUrl(externalUrl).includes("secret-signature")) {
+    throw new Error("Expected masked audio URLs not to expose query secrets.");
   }
 
   const supportPlan = resolveLocalRenderSupportPlan({
@@ -168,4 +193,4 @@ try {
   rmSync(tempRoot, { force: true, recursive: true });
 }
 
-console.log("Validated render-arabic-local voice fallback and unsupported field warnings.");
+console.log("Validated render-arabic-local voice source handling and unsupported field warnings.");

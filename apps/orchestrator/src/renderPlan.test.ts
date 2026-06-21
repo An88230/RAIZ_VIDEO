@@ -32,3 +32,36 @@ if (plan.adapter !== "short_video_maker" || plan.engine !== "remotion") {
 }
 
 console.log(`Prepared deterministic render plan for ${plan.job_id}.`);
+
+if (plan.duration_seconds !== null) {
+  throw new Error("Expected sample render plan duration to be null when the job does not declare duration_seconds.");
+}
+
+const audioUrlPlan = prepareRenderPlan(
+  {
+    ...validation.job,
+    job_id: "render-plan-audio-url-001",
+    duration_seconds: 45,
+    voice: {
+      type: "external_file",
+      provider: "external_url",
+      voice_name: "external_url",
+      audio_url: "https://gemini.example.test/audio.wav?token=secret-token"
+    },
+    output: {
+      ...validation.job.output,
+      filename: "render-plan-audio-url-001.mp4"
+    }
+  },
+  {
+    createdAt: "2026-06-17T00:00:00.000Z"
+  }
+);
+
+if (
+  audioUrlPlan.duration_seconds !== 45 ||
+  audioUrlPlan.voice.external_url !== "https://gemini.example.test/audio.wav?__redacted__=true" ||
+  JSON.stringify(audioUrlPlan).includes("secret-token")
+) {
+  throw new Error("Expected render plan to record duration and masked external audio URL.");
+}

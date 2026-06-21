@@ -1,5 +1,5 @@
 {
-  "video_id": "TEST-001",
+  "video_id": "TEST-DIAG-003",
   "template": "new_era_dark_editorial",
   "format": "9:16",
   "width": 1080,
@@ -11,12 +11,22 @@
   "topic": "اختبار",
   "angle": "اختبار الرندر المحلي",
   "voiceover": "هذا اختبار صوتي قصير",
+  "audio_url": "https://example.com/raiz-audio-placeholder.wav",
   "captions": [
     "هذا اختبار",
     "رندر محلي",
     "RAIZ"
   ],
-  "scenes": [],
+  "scenes": [
+    {
+      "caption": "بطاقة افتتاحية داكنة بنص عربي واضح",
+      "visual": "dark editorial Arabic card"
+    },
+    {
+      "caption": "مشهد تأكيد أن الرندر محلي وآمن",
+      "visual": "local render verification"
+    }
+  ],
   "brand": {
     "footer": "© 2025 Nabil88 | nabil88.art"
   }

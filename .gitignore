@@ -10,4 +10,5 @@ vendor/
 storage/*
 !storage/.gitkeep
 storage/jobs/
+apps/orchestrator/storage/
 apps/render-remotion/public/broll/

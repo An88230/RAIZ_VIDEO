@@ -56,6 +56,10 @@
     "hook": {
       "type": "string"
     },
+    "duration_seconds": {
+      "type": "number",
+      "minimum": 1
+    },
     "script": {
       "type": "string",
       "minLength": 1
@@ -94,6 +98,9 @@
           "type": "string"
         },
         "file_path": {
+          "type": "string"
+        },
+        "audio_url": {
           "type": "string"
         }
       }

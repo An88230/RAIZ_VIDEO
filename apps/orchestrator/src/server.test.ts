@@ -79,6 +79,17 @@ const realHttpClient: HttpClient = {
 const fakeRemotionRenderer: RemotionRenderer = {
   async render(input) {
     const outputPath = resolve(input.outputDir, input.outputFilename);
+    const job = JSON.parse(readFileSync(input.jobPath, "utf8")) as {
+      title?: string;
+      hook?: string;
+      script?: string;
+      voice?: { audio_url?: string; type?: string };
+    };
+    const visualLayers = [
+      job.title?.trim() ? "title" : null,
+      job.hook?.trim() ? "hook" : null,
+      job.script?.trim() ? "caption_scene_cards" : null
+    ].filter((layer): layer is string => Boolean(layer));
     writeFileSync(outputPath, "fake-remotion-mp4-bytes");
     return {
       ok: true,
@@ -87,6 +98,33 @@ const fakeRemotionRenderer: RemotionRenderer = {
       rawVideoPath: resolve(input.outputDir, "raw.mp4"),
       captionsSrtPath: resolve(input.outputDir, "captions.srt"),
       captionsAssPath: resolve(input.outputDir, "captions.ass"),
+      visual: {
+        status: visualLayers.length > 0 ? "visible_layers" : "empty",
+        layer_count: visualLayers.length,
+        layers: visualLayers,
+        text_layer_count: visualLayers.length,
+        scene_card_count: job.script?.trim() ? 1 : 0,
+        caption_cue_count: job.script?.trim() ? 1 : 0,
+        warnings: []
+      },
+      audio: job.voice?.audio_url
+        ? {
+            source: "external_url",
+            status: "attached",
+            external_url: maskUrlForTest(job.voice.audio_url),
+            has_audio_track: true,
+            external_audio_attached: true,
+            duration_seconds: 5,
+            warnings: []
+          }
+        : {
+            source: "no_external_audio",
+            status: "silent_render",
+            has_audio_track: false,
+            external_audio_attached: false,
+            duration_seconds: null,
+            warnings: ["No external audio URL or local voice file was declared."]
+          },
       message: "fake remotion render"
     };
   }
@@ -104,6 +142,7 @@ const n8nRenderPayload = {
   topic: "الانطفاء اللامع",
   angle: "إنت مش تعبان... إنت شغال وجزء منك مطفّي.",
   voiceover: "في لحظة ما، لا ينطفئ الإنسان بالكامل. فقط يفقد اللمعة التي كانت تشرح حضوره.",
+  audio_url: "https://gemini.example.test/audio.wav?token=secret-token&signature=secret-signature",
   captions: ["الانطفاء اللامع", "أن تبقى واضحًا من الخارج، ومتعبًا من الداخل."],
   scenes: [
     {
@@ -3759,8 +3798,8 @@ if (externalVoiceReport.checks?.some((check) => check.name === "voice_provider_e
   throw new Error("Expected external_file voice to skip the TTS provider requirement.");
 }
 
-if (!externalVoiceReport.checks?.some((check) => check.name === "voice_file_path_declared" && check.passed)) {
-  throw new Error("Expected external_file voice to require a declared file path.");
+if (!externalVoiceReport.checks?.some((check) => check.name === "voice_external_source_declared" && check.passed)) {
+  throw new Error("Expected external_file voice to require a declared file path or audio URL.");
 }
 
 const noneVoiceReport = JSON.parse(await prepareAndPreflight("voice-none-001", { type: "none" })) as {
@@ -3961,6 +4000,24 @@ if (
   throw new Error("Expected remotion-direct output manifest to be compatible with the review package pipeline.");
 }
 
+const remotionRenderManifest = JSON.parse(readFileSync(remotionRenderManifestPath, "utf8")) as {
+  visual?: { status?: string; layer_count?: number; layers?: string[] };
+  audio?: { source?: string; status?: string; has_audio_track?: boolean; external_audio_attached?: boolean };
+};
+
+if (
+  remotionRenderManifest.visual?.status !== "visible_layers" ||
+  !remotionRenderManifest.visual.layers?.includes("hook") ||
+  (remotionRenderManifest.visual.layer_count ?? 0) < 2 ||
+  remotionRenderManifest.audio?.source !== "no_external_audio" ||
+  remotionRenderManifest.audio.status !== "silent_render" ||
+  remotionRenderManifest.audio.has_audio_track !== false ||
+  remotionRenderManifest.audio.external_audio_attached !== false ||
+  JSON.stringify(remotionRenderManifest).toLowerCase().includes("gemini")
+) {
+  throw new Error("Expected remotion-direct manifest without audio URL to prove visible layers and silent audio.");
+}
+
 if (!existsSync(resolve(remotionJobDir, "output", `${remotionRenderJobId}.mp4`))) {
   throw new Error("Expected remotion-direct render to produce the output MP4 via the injected renderer.");
 }
@@ -4084,7 +4141,12 @@ for (const requiredArtifact of [
 
 const n8nStoredJob = JSON.parse(readFileSync(resolve(n8nJobDir, "job.json"), "utf8")) as {
   title?: string;
+  duration_seconds?: number;
   script?: string;
+  voice?: {
+    type?: string;
+    audio_url?: string;
+  };
   template?: {
     engine?: string;
     template_id?: string;
@@ -4100,6 +4162,10 @@ const n8nStoredJob = JSON.parse(readFileSync(resolve(n8nJobDir, "job.json"), "ut
 if (
   n8nStoredJob.title !== n8nRenderPayload.topic ||
   !n8nStoredJob.script?.includes("لا ينطفئ الإنسان") ||
+  !n8nStoredJob.script?.includes("أن تبقى واضحًا") ||
+  n8nStoredJob.duration_seconds !== n8nRenderPayload.duration ||
+  n8nStoredJob.voice?.type !== "external_file" ||
+  n8nStoredJob.voice.audio_url !== n8nRenderPayload.audio_url ||
   n8nStoredJob.template?.engine !== "remotion_direct" ||
   n8nStoredJob.template?.template_id !== "raiz_dark_hook_01" ||
   n8nStoredJob.template?.style_preset !== "new_era_dark_editorial" ||
@@ -4109,6 +4175,54 @@ if (
     "dark desk phone light|night office close up|writing notebook at night"
 ) {
   throw new Error("Expected n8n Remotion intake to map payload into a deterministic RAIZ job.");
+}
+
+const n8nRenderPlan = JSON.parse(readFileSync(resolve(n8nJobDir, "render-plan.json"), "utf8")) as {
+  duration_seconds?: number | null;
+  voice?: {
+    external_url?: string | null;
+  };
+};
+
+if (
+  n8nRenderPlan.duration_seconds !== n8nRenderPayload.duration ||
+  n8nRenderPlan.voice?.external_url !== "https://gemini.example.test/audio.wav?__redacted__=true" ||
+  JSON.stringify(n8nRenderPlan).includes("secret-token") ||
+  JSON.stringify(n8nRenderPlan).includes("secret-signature")
+) {
+  throw new Error("Expected n8n render-plan to include duration and masked external audio URL only.");
+}
+
+const n8nRenderManifest = JSON.parse(readFileSync(resolve(n8nJobDir, "render-manifest.remotion-direct.json"), "utf8")) as {
+  visual?: {
+    status?: string;
+    layer_count?: number;
+    layers?: string[];
+    text_layer_count?: number;
+  };
+  audio?: {
+    source?: string;
+    status?: string;
+    external_url?: string | null;
+    has_audio_track?: boolean;
+    external_audio_attached?: boolean;
+  };
+};
+
+if (
+  n8nRenderManifest.visual?.status !== "visible_layers" ||
+  !n8nRenderManifest.visual.layers?.includes("hook") ||
+  !n8nRenderManifest.visual.layers.includes("caption_scene_cards") ||
+  (n8nRenderManifest.visual.text_layer_count ?? 0) < 2 ||
+  n8nRenderManifest.audio?.source !== "external_url" ||
+  n8nRenderManifest.audio.status !== "attached" ||
+  n8nRenderManifest.audio.external_url !== "https://gemini.example.test/audio.wav?__redacted__=true" ||
+  n8nRenderManifest.audio.has_audio_track !== true ||
+  n8nRenderManifest.audio.external_audio_attached !== true ||
+  JSON.stringify(n8nRenderManifest).includes("secret-token") ||
+  JSON.stringify(n8nRenderManifest).includes("secret-signature")
+) {
+  throw new Error("Expected n8n render manifest to prove visual layers and masked external audio URL usage.");
 }
 
 const n8nArtifactsResponse = await server.inject({
@@ -4209,6 +4323,12 @@ function clearManagedEnv(): void {
   for (const key of managedEnvKeys) {
     delete process.env[key];
   }
+}
+
+function maskUrlForTest(url: string): string {
+  const parsed = new URL(url);
+  parsed.search = parsed.search ? "?__redacted__=true" : "";
+  return parsed.toString();
 }
 
 async function createJobThroughDryRun(jobId: string): Promise<string> {

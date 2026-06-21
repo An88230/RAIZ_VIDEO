@@ -97,6 +97,8 @@ export function mapN8nRenderPayloadToRaizJob(payload: unknown): RaizJob {
   const language = optionalString(source, "language") ?? "ar";
   const rtl = optionalBoolean(source, "rtl") ?? true;
   const script = buildScript(source);
+  const externalAudioUrl = findExternalAudioUrl(source);
+  const durationSeconds = optionalNumber(source, "duration") ?? optionalNumber(source, "duration_seconds");
 
   if (format !== "9:16") {
     issues.push('format must be "9:16".');
@@ -145,17 +147,23 @@ export function mapN8nRenderPayloadToRaizJob(payload: unknown): RaizJob {
     direction: "rtl",
     title,
     hook,
+    ...(durationSeconds && durationSeconds > 0 ? { duration_seconds: durationSeconds } : {}),
     script,
     template: {
       engine: "remotion_direct",
       template_id: templateId,
       ...(templateId !== template ? { style_preset: template } : {})
     },
-    voice: {
-      type: "edge_tts",
-      provider: "edge",
-      voice_name: "ar-SA-HamedNeural"
-    },
+    voice: externalAudioUrl
+      ? {
+          type: "external_file",
+          provider: "external_url",
+          voice_name: "external_url",
+          audio_url: externalAudioUrl
+        }
+      : {
+          type: "none"
+        },
     assets: {
       broll_source: searchTerms.length > 0 ? "pexels" : "none",
       ...(searchTerms.length > 0
@@ -247,19 +255,22 @@ function optionalBoolean(source: Record<string, unknown>, key: string): boolean 
 }
 
 function buildScript(source: Record<string, unknown>): string {
+  const parts: string[] = [];
   const voiceover = optionalString(source, "voiceover");
 
   if (voiceover) {
-    return voiceover;
+    parts.push(voiceover);
   }
 
   const captions = textListFromUnknown(source.captions);
 
   if (captions.length > 0) {
-    return captions.join("\n");
+    parts.push(...captions);
   }
 
-  return textListFromUnknown(source.scenes).join("\n");
+  parts.push(...textListFromUnknown(source.scenes));
+
+  return dedupeStrings(parts).join("\n");
 }
 
 function textListFromUnknown(value: unknown): string[] {
@@ -331,6 +342,62 @@ function collectTermValue(value: unknown, terms: Set<string>): void {
       collectTermValue(item, terms);
     }
   }
+}
+
+function findExternalAudioUrl(source: Record<string, unknown>): string | null {
+  return (
+    optionalUrlString(source, "audio_url") ??
+    optionalUrlString(source, "voiceover_url") ??
+    optionalUrlString(source, "tts_url") ??
+    getNestedUrlString(source.voice, "audio_url") ??
+    getNestedUrlString(source.audio, "src") ??
+    getNestedUrlString(source.audio, "url")
+  );
+}
+
+function optionalUrlString(source: Record<string, unknown>, key: string): string | null {
+  const value = optionalString(source, key);
+
+  if (!value) {
+    return null;
+  }
+
+  return isHttpUrl(value) ? value : null;
+}
+
+function getNestedUrlString(value: unknown, key: string): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return optionalUrlString(value as Record<string, unknown>, key);
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function dedupeStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const normalized = value.trim();
+
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+
+    seen.add(normalized);
+    result.push(normalized);
+  }
+
+  return result;
 }
 
 function getNestedString(value: unknown, key: string): string | null {

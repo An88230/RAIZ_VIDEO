@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,7 +38,30 @@ export interface RemotionRenderResult {
   voicePath?: string;
   captionsSrtPath?: string;
   captionsAssPath?: string;
+  audio?: RemotionRenderAudioSummary;
+  visual?: RemotionRenderVisualSummary;
   message?: string;
+}
+
+export interface RemotionRenderAudioSummary {
+  source: string;
+  status: string;
+  external_url?: string | null;
+  file_path?: string | null;
+  has_audio_track?: boolean;
+  external_audio_attached?: boolean;
+  duration_seconds?: number | null;
+  warnings?: string[];
+}
+
+export interface RemotionRenderVisualSummary {
+  status: string;
+  layer_count: number;
+  layers: string[];
+  text_layer_count?: number;
+  scene_card_count?: number;
+  caption_cue_count?: number;
+  warnings?: string[];
 }
 
 export interface RemotionRenderer {
@@ -76,6 +99,7 @@ export function createScriptRemotionRenderer(): RemotionRenderer {
   return {
     async render(input) {
       const outputPath = resolve(input.outputDir, input.outputFilename);
+      const diagnosticsPath = resolve(input.outputDir, "render-diagnostics.json");
       const timeoutMs = getRenderTimeoutMs();
       const renderResult = await runNode(
         [renderScriptPath, `--job=${input.jobPath}`, `--out=${input.outputDir}`],
@@ -83,14 +107,17 @@ export function createScriptRemotionRenderer(): RemotionRenderer {
         timeoutMs
       );
       const ok = renderResult.exitCode === 0 && !renderResult.timedOut && (await pathExists(outputPath));
+      const diagnostics = await readRenderDiagnostics(diagnosticsPath);
 
       return {
         ok,
         outputPath,
         rawVideoPath: resolve(input.outputDir, "raw.mp4"),
-        voicePath: resolve(input.outputDir, "voice.aiff"),
+        voicePath: diagnostics.audio?.status === "attached" ? resolve(input.outputDir, "voice.aiff") : undefined,
         captionsSrtPath: resolve(input.outputDir, "captions.srt"),
         captionsAssPath: resolve(input.outputDir, "captions.ass"),
+        audio: diagnostics.audio,
+        visual: diagnostics.visual,
         message: buildRenderDriverMessage(ok, renderResult, timeoutMs)
       };
     }
@@ -193,6 +220,8 @@ export async function renderJobWithRemotionDirect(
       srt: result.captionsSrtPath ?? null,
       ass: result.captionsAssPath ?? null
     },
+    visual: result.visual ?? buildFallbackVisualSummary(job),
+    audio: result.audio ?? buildFallbackAudioSummary(job),
     duration_seconds: result.durationSeconds ?? null,
     created_at: completedAt
   };
@@ -244,6 +273,92 @@ export async function renderJobWithRemotionDirect(
   );
 
   return finalStatus;
+}
+
+async function readRenderDiagnostics(path: string): Promise<{
+  audio?: RemotionRenderAudioSummary;
+  visual?: RemotionRenderVisualSummary;
+}> {
+  try {
+    const raw = await readFile(path, "utf8");
+    const parsed = JSON.parse(raw) as {
+      audio?: RemotionRenderAudioSummary;
+      visual?: RemotionRenderVisualSummary;
+    };
+
+    return {
+      audio: parsed.audio,
+      visual: parsed.visual
+    };
+  } catch {
+    return {};
+  }
+}
+
+function buildFallbackVisualSummary(job: { title?: string; hook?: string; script?: string }): RemotionRenderVisualSummary {
+  const layers = [
+    job.title?.trim() ? "title" : null,
+    job.hook?.trim() ? "hook" : null,
+    job.script?.trim() ? "caption_scene_cards" : null
+  ].filter((layer): layer is string => Boolean(layer));
+
+  return {
+    status: layers.length > 0 ? "visible_layers_unverified" : "empty_unverified",
+    layer_count: layers.length,
+    layers,
+    text_layer_count: layers.length,
+    scene_card_count: job.script?.trim() ? 1 : 0,
+    caption_cue_count: job.script?.trim() ? 1 : 0,
+    warnings: ["Render diagnostics were not available; visual layer summary is inferred from the job."]
+  };
+}
+
+function buildFallbackAudioSummary(job: { voice?: { audio_url?: string; file_path?: string; type?: string } }): RemotionRenderAudioSummary {
+  if (job.voice?.audio_url) {
+    return {
+      source: "external_url",
+      status: "unverified",
+      external_url: maskUrl(job.voice.audio_url),
+      has_audio_track: undefined,
+      external_audio_attached: undefined,
+      warnings: ["Render diagnostics were not available; external audio attachment is unverified."]
+    };
+  }
+
+  if (job.voice?.file_path) {
+    return {
+      source: "external_file",
+      status: "unverified",
+      file_path: job.voice.file_path,
+      has_audio_track: undefined,
+      external_audio_attached: undefined,
+      warnings: ["Render diagnostics were not available; external file attachment is unverified."]
+    };
+  }
+
+  return {
+    source: "no_external_audio",
+    status: "silent_render",
+    has_audio_track: false,
+    external_audio_attached: false,
+    warnings: ["No external audio URL or local voice file was declared."]
+  };
+}
+
+function maskUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+
+    if (parsed.search) {
+      parsed.search = "?__redacted__=true";
+    }
+
+    return parsed.toString();
+  } catch {
+    return "[invalid-url]";
+  }
 }
 
 interface RenderDriverResult {

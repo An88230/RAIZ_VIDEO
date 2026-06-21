@@ -25,6 +25,8 @@ inside the next phase · **Low** = polish / hardening backlog.
 | GAP-08 | Low | Brief→job bridge defaults to an unimplemented `edge_tts` voice | Open |
 | GAP-09 | Medium | Gemini TTS native audio (official render voice) is contract-only and unwired | In progress |
 | GAP-10 | High | n8n workflow exports include credential references | Fixed |
+| GAP-11 | High | Remotion direct render can output black/empty visual frames while reporting rendered | In progress |
+| GAP-12 | High | External/Gemini TTS audio URL consumption is unverified or broken | In progress |
 
 ---
 
@@ -194,6 +196,50 @@ inside the next phase · **Low** = polish / hardening backlog.
 - **Closure:** Fixed. n8n workflow exports are sanitized, runtime credential
   binding is documented as an n8n Cloud/runtime responsibility, and a workflow
   export safety test is part of `npm test`.
+
+## GAP-11 (High) — Remotion direct render outputs black/empty visual frame
+
+- **Where:** the `remotion_direct` render path, especially n8n render intake
+  (`POST /integrations/n8n/render/remotion-direct`), render-plan generation,
+  `render-manifest.remotion-direct.json`, and the Remotion composition under
+  [apps/render-remotion](../apps/render-remotion).
+- **Observed state:** a job can technically render an MP4 and move to
+  `status=rendered`, while the visual result is black, nearly empty, or too weak
+  to be considered a valid publishable video. This can happen even when the
+  incoming payload contains `topic`, `angle`, `captions`, or `scenes`.
+- **Impact:** false success. A job can look complete in storage and API state
+  while the produced MP4 is not usable for review or publishing.
+- **Required fix:** when a payload contains `angle`, `captions`, or `scenes`, the
+  Remotion props and composition must create visible Arabic RTL text layers,
+  simple scene cards, and footer text. The render manifest must record the visual
+  layer summary. A render must not silently succeed as visually empty.
+- **Current closure note:** In progress. The render driver now refuses fully empty
+  visual plans, passes scene-card/footer props into Remotion, and writes visual
+  diagnostics for the orchestrator manifest.
+
+## GAP-12 (High) — External/Gemini TTS audio URL consumption is unverified or broken
+
+- **Where:** n8n render intake, RAIZ job voice mapping, render-plan generation,
+  `scripts/render-arabic-local.mjs`, and `render-manifest.remotion-direct.json`.
+- **Relationship to existing gaps:** this is related to GAP-04 and GAP-09, but it
+  is not the same gap. GAP-09 means Gemini TTS is not integrated as an official
+  RAIZ voice layer. GAP-12 means that even when a ready audio URL exists, the
+  render path did not prove it consumed that URL correctly.
+- **Observed state:** users may believe Gemini TTS was used, while the render
+  actually falls back to local placeholder/fallback audio or produces distorted
+  narration. Existing manifests only showed a local `voice.aiff` path and did not
+  state whether the audio came from an external URL, fallback, or no external
+  source.
+- **Required fix:** support ready external audio URL fields only:
+  `audio_url`, `voiceover_url`, `tts_url`, `voice.audio_url`, `audio.src`, and
+  `audio.url`. If an external URL is found, render-plan/manifest must record a
+  masked `external_url` without query secrets. If no URL exists, the manifest
+  must say `no_external_audio` and `silent_render` or another explicitly soft
+  fallback. The system must not claim Gemini TTS was used without a real audio
+  URL, and must not ship noisy robotic fallback audio as a final result.
+- **Current closure note:** In progress. n8n intake maps external audio URLs into
+  RAIZ jobs, render-plan masks URLs, local render attaches verified external
+  audio when possible, and otherwise produces an explicitly silent render.
 
 ---
 

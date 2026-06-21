@@ -21,6 +21,8 @@ export interface RaizDarkHook01Props {
   hook: string;
   title?: string;
   captions: CaptionCue[];
+  sceneCards?: string[];
+  footer?: string | null;
   durationInSeconds?: number;
   /** Optional background b-roll, relative to the Remotion public dir. */
   brollSrc?: string;
@@ -35,7 +37,10 @@ const fillVideoStyle: React.CSSProperties = {
 
 export const RaizDarkHook01: React.FC<RaizDarkHook01Props> = ({
   hook,
+  title,
   captions,
+  sceneCards = [],
+  footer,
   brollSrc,
   brollDurationInSeconds
 }) => {
@@ -85,8 +90,24 @@ export const RaizDarkHook01: React.FC<RaizDarkHook01Props> = ({
         }}
       />
 
+      {title ? (
+        <div style={{ position: "absolute", top: 120, left: 90, right: 90, textAlign: "center" }}>
+          <ArabicText
+            weight={600}
+            style={{
+              fontSize: 42,
+              lineHeight: 1.35,
+              color: "rgba(255,255,255,0.78)",
+              textAlign: "center"
+            }}
+          >
+            {title}
+          </ArabicText>
+        </div>
+      ) : null}
+
       <AbsoluteFill
-        style={{ justifyContent: "center", alignItems: "center", padding: "0 90px" }}
+        style={{ justifyContent: "center", alignItems: "center", padding: "0 90px 260px" }}
       >
         <div
           style={{
@@ -110,6 +131,47 @@ export const RaizDarkHook01: React.FC<RaizDarkHook01Props> = ({
         </div>
       </AbsoluteFill>
 
+      {sceneCards.length > 0 ? (
+        <div
+          style={{
+            position: "absolute",
+            left: 80,
+            right: 80,
+            bottom: activeCaption ? 430 : 300,
+            display: "flex",
+            flexDirection: "column",
+            gap: 18,
+            alignItems: "stretch"
+          }}
+        >
+          {sceneCards.slice(0, 3).map((card, index) => (
+            <div
+              key={`${card}-${index}`}
+              style={{
+                backgroundColor: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.16)",
+                borderRadius: 8,
+                padding: "18px 24px"
+              }}
+            >
+              <ArabicText
+                weight={600}
+                style={{
+                  fontSize: 38,
+                  lineHeight: 1.35,
+                  color: "rgba(255,255,255,0.9)",
+                  textAlign: "right",
+                  direction: "rtl",
+                  unicodeBidi: "plaintext"
+                }}
+              >
+                {card}
+              </ArabicText>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {activeCaption ? (
         <div style={{ position: "absolute", left: 90, right: 90, bottom: 260, textAlign: "center" }}>
           <ArabicText
@@ -126,6 +188,22 @@ export const RaizDarkHook01: React.FC<RaizDarkHook01Props> = ({
             }}
           >
             {activeCaption.text}
+          </ArabicText>
+        </div>
+      ) : null}
+
+      {footer ? (
+        <div style={{ position: "absolute", left: 80, right: 80, bottom: 80, textAlign: "center" }}>
+          <ArabicText
+            weight={400}
+            style={{
+              fontSize: 28,
+              lineHeight: 1.2,
+              color: "rgba(255,255,255,0.48)",
+              textAlign: "center"
+            }}
+          >
+            {footer}
           </ArabicText>
         </div>
       ) : null}

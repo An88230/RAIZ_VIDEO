@@ -2,11 +2,11 @@
 // RAIZ local Arabic render driver (Remotion-direct + external/local Arabic VO + FFmpeg).
 //
 // Pipeline:
-//   1. Resolve Arabic VO (job external_file path, else macOS `say -v Majed` with a warning).
+//   1. Resolve Arabic VO (external file or external audio URL, else silent with a warning).
 //   2. Measure VO duration with ffprobe.
 //   3. Build timed caption cues + write captions.srt / captions.ass sidecars.
 //   4. Render the visual layer with Remotion (1080x1920, RTL Arabic).
-//   5. Mux the VO into the silent Remotion output with FFmpeg (no libass needed).
+//   5. Attach audio only when an external source is usable (no noisy fallback).
 //   6. Verify the final MP4 dimensions/audio with ffprobe.
 //
 // Usage: node scripts/render-arabic-local.mjs [--job=path.json] [--out=dir]
@@ -34,7 +34,7 @@ const FPS = 30;
 // underscores (e.g. raiz_dark_hook_01), so map "_" -> "-" to bridge the two.
 const DEFAULT_COMPOSITION_ID = "raiz-dark-hook-01";
 const SAY_VOICE = "Majed";
-const MACOS_SAY_FALLBACK_SOURCE = "macos_say_fallback";
+const NO_EXTERNAL_AUDIO_SOURCE = "no_external_audio";
 
 function parseArgs(argv) {
   const args = { job: "samples/valid-arabic-9x16-job.json", out: null, dryVoiceCheck: false };
@@ -58,15 +58,29 @@ export function resolveVoicePlan(job, options = {}) {
   const voiceType = typeof voice.type === "string" && voice.type.trim() ? voice.type.trim() : "unspecified";
   const provider = typeof voice.provider === "string" && voice.provider.trim() ? voice.provider.trim() : null;
   const voiceName = typeof voice.voice_name === "string" && voice.voice_name.trim() ? voice.voice_name.trim() : null;
+  const externalUrl = findExternalAudioUrl(job);
   const externalPath =
     voiceType === "external_file" && typeof voice.file_path === "string" && voice.file_path.trim()
       ? resolve(root, voice.file_path)
       : null;
 
+  if (externalUrl) {
+    return {
+      source: "external_url",
+      externalPath: null,
+      externalUrl,
+      externalUrlMasked: maskUrl(externalUrl),
+      fallbackVoice: null,
+      warnings: []
+    };
+  }
+
   if (externalPath && existsSync(externalPath)) {
     return {
       source: "external_file",
       externalPath,
+      externalUrl: null,
+      externalUrlMasked: null,
       fallbackVoice: null,
       warnings: []
     };
@@ -83,21 +97,25 @@ export function resolveVoicePlan(job, options = {}) {
 
   if (externalPath) {
     warnings.push(
-      `Requested external voice file was not found at ${externalPath}; falling back to macOS say voice "${SAY_VOICE}".`
+      `Requested external voice file was not found at ${externalPath}; rendering without narration audio.`
     );
   } else if (voiceType === "external_file") {
     warnings.push(
-      `Requested voice.type="external_file" without a usable file_path; falling back to macOS say voice "${SAY_VOICE}".`
+      'Requested voice.type="external_file" without a usable file_path or audio_url; rendering without narration audio.'
     );
+  } else if (voiceType === "none") {
+    warnings.push("No external audio URL or local voice file was supplied; rendering a silent video.");
   } else {
     warnings.push(
-      `Requested voice provider is not implemented in scripts/render-arabic-local.mjs (${requestSummary}); falling back to macOS say voice "${SAY_VOICE}".`
+      `Requested voice provider is not implemented in scripts/render-arabic-local.mjs (${requestSummary}); rendering without narration audio unless an external audio URL/file is supplied.`
     );
   }
 
   return {
-    source: MACOS_SAY_FALLBACK_SOURCE,
+    source: NO_EXTERNAL_AUDIO_SOURCE,
     externalPath: null,
+    externalUrl: null,
+    externalUrlMasked: null,
     fallbackVoice: SAY_VOICE,
     warnings
   };
@@ -257,6 +275,73 @@ function logBrollWarnings(warnings) {
   }
 }
 
+export function maskUrl(url) {
+  try {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+
+    if (parsed.search) {
+      parsed.search = "?__redacted__=true";
+    }
+
+    return parsed.toString();
+  } catch {
+    return "[invalid-url]";
+  }
+}
+
+function findExternalAudioUrl(job) {
+  const voice = job.voice ?? {};
+
+  for (const candidate of [
+    job.audio_url,
+    job.voiceover_url,
+    job.tts_url,
+    voice.audio_url,
+    job.audio?.src,
+    job.audio?.url
+  ]) {
+    if (typeof candidate !== "string" || !candidate.trim()) {
+      continue;
+    }
+
+    try {
+      const parsed = new URL(candidate.trim());
+
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        return candidate.trim();
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function buildVisualPlan({ title, hook, captions, footer }) {
+  const sceneCards = captions
+    .map((cue) => cue.text)
+    .filter((text) => typeof text === "string" && text.trim())
+    .slice(0, 4);
+  const layers = [
+    title?.trim() ? "title" : null,
+    hook?.trim() ? "hook" : null,
+    sceneCards.length > 0 ? "caption_scene_cards" : null,
+    footer?.trim() ? "footer" : null
+  ].filter(Boolean);
+
+  return {
+    layers,
+    layerCount: layers.length,
+    hasText: Boolean(title?.trim() || hook?.trim() || sceneCards.length > 0),
+    sceneCards,
+    footer: footer?.trim() || null,
+    warnings: layers.length > 0 ? [] : ["No visual text layers were available for render."]
+  };
+}
+
 function run(label, command, commandArgs, options = {}) {
   console.log(`\n[run] ${label}: ${command} ${commandArgs.join(" ")}`);
   const result = spawnSync(command, commandArgs, { stdio: "inherit", ...options });
@@ -271,6 +356,74 @@ function capture(command, commandArgs, options = {}) {
     throw new Error(`${command} ${commandArgs.join(" ")} failed: ${result.stderr || result.stdout}`);
   }
   return result.stdout.trim();
+}
+
+async function downloadExternalAudio(url, outPath) {
+  const maskedUrl = maskUrl(url);
+
+  if (isPlaceholderUrl(url)) {
+    return {
+      ok: false,
+      status: "warning",
+      warning: `External audio URL is a placeholder and was not fetched: ${maskedUrl}`
+    };
+  }
+
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    return {
+      ok: false,
+      status: "warning",
+      warning: `External audio URL fetch failed for ${maskedUrl}: ${error.message}`
+    };
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (!response.ok) {
+    return {
+      ok: false,
+      status: "warning",
+      warning: `External audio URL returned HTTP ${response.status} for ${maskedUrl}.`
+    };
+  }
+
+  if (!contentType.toLowerCase().startsWith("audio/")) {
+    return {
+      ok: false,
+      status: "warning",
+      warning: `External audio URL did not return audio content (${contentType || "missing content-type"}) for ${maskedUrl}.`
+    };
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+
+  if (buffer.length === 0) {
+    return {
+      ok: false,
+      status: "warning",
+      warning: `External audio URL returned an empty body for ${maskedUrl}.`
+    };
+  }
+
+  writeFileSync(outPath, buffer);
+
+  return {
+    ok: true,
+    status: "attached",
+    warning: null
+  };
+}
+
+function isPlaceholderUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "example.com" || parsed.hostname.endsWith(".example.com");
+  } catch {
+    return false;
+  }
 }
 
 function probeDurationSeconds(mediaPath) {
@@ -453,6 +606,7 @@ async function main() {
   const propsPath = resolve(outDir, "remotion-props.json");
   const srtPath = resolve(outDir, "captions.srt");
   const assPath = resolve(outDir, "captions.ass");
+  const diagnosticsPath = resolve(outDir, "render-diagnostics.json");
 
   console.log(`RAIZ local Arabic render`);
   console.log(`  job:   ${jobPath}`);
@@ -473,21 +627,65 @@ async function main() {
     return;
   }
 
-  // 1. Voice-over: external file if provided and present, else local macOS TTS.
+  let voiceInputPath = null;
+  const audioSummary = {
+    source: voicePlan.source,
+    status: "silent_render",
+    external_url: voicePlan.externalUrlMasked ?? null,
+    file_path: voicePlan.source === "external_file" ? voicePlan.externalPath : null,
+    external_audio_attached: false,
+    warnings: [...voicePlan.warnings]
+  };
+
+  // 1. Voice-over: external file or external URL if provided and usable.
   if (voicePlan.source === "external_file" && voicePlan.externalPath) {
     console.log(`\n[voice] using external VO: ${voicePlan.externalPath}`);
     copyFileSync(voicePlan.externalPath, voiceAiff);
-  } else {
-    const narration = hook ? `${hook} ${script}` : script;
-    run("generate Arabic VO (say)", "say", ["-v", SAY_VOICE, "-o", voiceAiff, narration]);
+    voiceInputPath = voiceAiff;
+    audioSummary.status = "attached";
+    audioSummary.external_audio_attached = true;
+  } else if (voicePlan.source === "external_url" && voicePlan.externalUrl) {
+    console.log(`\n[voice] fetching external audio URL: ${voicePlan.externalUrlMasked}`);
+    const download = await downloadExternalAudio(voicePlan.externalUrl, voiceAiff);
+
+    if (download.ok) {
+      voiceInputPath = voiceAiff;
+      audioSummary.status = "attached";
+      audioSummary.external_audio_attached = true;
+    } else {
+      audioSummary.status = download.status;
+      audioSummary.warnings.push(download.warning);
+      console.warn(`[voice][warning] ${download.warning}`);
+    }
   }
 
   // 2. Duration.
-  const durationSeconds = probeDurationSeconds(voiceAiff);
-  console.log(`\n[duration] VO is ${durationSeconds.toFixed(3)}s -> ${Math.round(durationSeconds * FPS)} frames @ ${FPS}fps`);
+  const requestedDuration =
+    typeof job.duration_seconds === "number" && job.duration_seconds > 0
+      ? job.duration_seconds
+      : typeof job.duration === "number" && job.duration > 0
+        ? job.duration
+        : null;
+  const audioDurationSeconds = voiceInputPath ? probeDurationSeconds(voiceInputPath) : null;
+  const durationSeconds = audioDurationSeconds ?? requestedDuration ?? 10;
+  const durationSource = audioDurationSeconds ? "audio" : requestedDuration ? "job_requested" : "default";
+  console.log(
+    `\n[duration] ${durationSource} duration is ${durationSeconds.toFixed(3)}s -> ${Math.round(durationSeconds * FPS)} frames @ ${FPS}fps`
+  );
 
   // 3. Captions.
   const { scriptCues, allCues } = buildCues(hook, script, durationSeconds);
+  const visualPlan = buildVisualPlan({
+    title: job.title || "",
+    hook,
+    captions: allCues,
+    footer: job.publish?.description || ""
+  });
+
+  if (visualPlan.layerCount === 0) {
+    throw new Error("Refusing to render a visually empty Remotion output.");
+  }
+
   writeFileSync(srtPath, buildSrt(allCues), "utf8");
   writeFileSync(assPath, buildAss(allCues), "utf8");
   console.log(`[captions] wrote ${allCues.length} cues -> captions.srt, captions.ass`);
@@ -547,6 +745,8 @@ async function main() {
     hook,
     title: job.title || "",
     captions: scriptCues,
+    sceneCards: visualPlan.sceneCards,
+    footer: visualPlan.footer,
     durationInSeconds: durationSeconds,
     ...(brollSrc ? { brollSrc, brollDurationInSeconds: brollDurationSeconds } : {})
   };
@@ -565,28 +765,32 @@ async function main() {
     }
   }
 
-  // 5. Mux VO into the silent render.
-  run("FFmpeg mux audio", "ffmpeg", [
-    "-y",
-    "-i",
-    rawVideo,
-    "-i",
-    voiceAiff,
-    "-map",
-    "0:v:0",
-    "-map",
-    "1:a:0",
-    "-c:v",
-    "copy",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
-    "-movflags",
-    "+faststart",
-    "-shortest",
-    finalVideo
-  ]);
+  // 5. Mux audio only when a verified external source exists.
+  if (voiceInputPath) {
+    run("FFmpeg mux audio", "ffmpeg", [
+      "-y",
+      "-i",
+      rawVideo,
+      "-i",
+      voiceInputPath,
+      "-map",
+      "0:v:0",
+      "-map",
+      "1:a:0",
+      "-c:v",
+      "copy",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "192k",
+      "-movflags",
+      "+faststart",
+      "-shortest",
+      finalVideo
+    ]);
+  } else {
+    copyFileSync(rawVideo, finalVideo);
+  }
 
   // 6. Verify.
   const probeField = (field) =>
@@ -617,6 +821,32 @@ async function main() {
     finalVideo
   ]);
   const finalDuration = probeDurationSeconds(finalVideo);
+  const diagnostics = {
+    job_id: jobId,
+    visual: {
+      status: visualPlan.layerCount > 0 ? "visible_layers" : "empty",
+      layer_count: visualPlan.layerCount,
+      layers: visualPlan.layers,
+      text_layer_count: visualPlan.layers.filter((layer) => ["title", "hook", "caption_scene_cards", "footer"].includes(layer))
+        .length,
+      scene_card_count: visualPlan.sceneCards.length,
+      caption_cue_count: allCues.length,
+      warnings: visualPlan.warnings
+    },
+    audio: {
+      ...audioSummary,
+      has_audio_track: Boolean(hasAudio),
+      duration_seconds: audioDurationSeconds
+    },
+    duration: {
+      requested_seconds: requestedDuration,
+      rendered_seconds: finalDuration,
+      source: durationSource
+    },
+    created_at: new Date().toISOString()
+  };
+
+  writeFileSync(diagnosticsPath, `${JSON.stringify(diagnostics, null, 2)}\n`, "utf8");
 
   console.log("\n========================================");
   console.log("✅ RAIZ first Arabic MP4 rendered");
@@ -629,9 +859,6 @@ async function main() {
 
   if (dimensions !== "1080x1920") {
     throw new Error(`Expected 1080x1920 output, got ${dimensions}.`);
-  }
-  if (!hasAudio) {
-    throw new Error("Final MP4 has no audio track.");
   }
 }
 

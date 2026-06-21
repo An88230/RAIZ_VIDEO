@@ -22,6 +22,7 @@ export interface RaizJob {
   direction: "rtl" | "ltr";
   title: string;
   hook?: string;
+  duration_seconds?: number;
   script: string;
   template: {
     engine: RaizTemplateEngine;
@@ -33,6 +34,7 @@ export interface RaizJob {
     provider?: string;
     voice_name?: string;
     file_path?: string;
+    audio_url?: string;
   };
   assets?: {
     broll_source?: "google_drive" | "local" | "pexels" | "pixabay" | "none";

@@ -147,9 +147,9 @@ function buildVoiceChecks(job: RaizJob, renderPlan: RenderPlan): PreflightCheck[
   if (voiceType === "external_file") {
     return [
       errorCheck(
-        "voice_file_path_declared",
-        Boolean(job.voice.file_path?.trim()),
-        "External voice file path is declared."
+        "voice_external_source_declared",
+        Boolean(job.voice.file_path?.trim() || job.voice.audio_url?.trim()),
+        "External voice file path or audio URL is declared."
       )
     ];
   }

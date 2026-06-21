@@ -14,6 +14,7 @@ export interface RenderPlan {
   voice: {
     provider: string | null;
     voice_name: string | null;
+    external_url: string | null;
   };
   captions: RaizJob["captions"];
   assets: {
@@ -26,6 +27,7 @@ export interface RenderPlan {
     filename: string;
     local_path: string;
   };
+  duration_seconds: number | null;
   created_at: string;
 }
 
@@ -47,7 +49,8 @@ export function prepareRenderPlan(job: RaizJob, options: PrepareRenderPlanOption
     template_id: job.template.template_id,
     voice: {
       provider: job.voice.provider ?? null,
-      voice_name: job.voice.voice_name ?? null
+      voice_name: job.voice.voice_name ?? null,
+      external_url: job.voice.audio_url ? maskUrl(job.voice.audio_url) : null
     },
     captions: job.captions,
     assets: {
@@ -60,6 +63,23 @@ export function prepareRenderPlan(job: RaizJob, options: PrepareRenderPlanOption
       filename: job.output.filename,
       local_path: options.outputLocalPath ?? resolve("storage", "jobs", job.job_id, "output", job.output.filename)
     },
+    duration_seconds: job.duration_seconds ?? null,
     created_at: options.createdAt ?? new Date().toISOString()
   };
+}
+
+export function maskUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+
+    if (parsed.search) {
+      parsed.search = "?__redacted__=true";
+    }
+
+    return parsed.toString();
+  } catch {
+    return "[invalid-url]";
+  }
 }
