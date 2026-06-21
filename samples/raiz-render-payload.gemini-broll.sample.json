@@ -11,26 +11,32 @@
   "topic": "الانطفاء اللامع",
   "angle": "إنت مش تعبان... إنت محتاج تسمي الشعور",
   "tts_provider": "gemini",
+  "series_title_ar": "الانطفاء اللامع",
+  "series_title_en": "Luminous Extinction",
+  "headline_main_word": "الانطفاء",
+  "supporting_caption": "اللامع ليس كسلًا",
+  "footer_text": "© 2025 Nabil88.ART",
+  "mood": "dark",
   "narration_blocks": [
     {
       "block_id": "B01",
       "voiceover_text": "الانطفاء اللامع ليس كسلًا.",
       "caption": "الانطفاء اللامع ليس كسلًا",
-      "visual_query": "portrait night office laptop glow",
-      "mood": "quiet"
+      "visual_query": "vertical cinematic skyscrapers glass buildings sunset",
+      "mood": "dark"
     },
     {
       "block_id": "B02",
       "voiceover_text": "هو أن تبدو حاضرًا، بينما داخلك يطلب استراحة.",
       "caption": "تبدو حاضرًا... وداخلك يطلب استراحة",
-      "visual_query": "person writing journal at night close up",
-      "mood": "reflective"
+      "visual_query": "vertical city towers reflection glass facade dusk",
+      "mood": "dark"
     },
     {
       "block_id": "B03",
       "voiceover_text": "سمّه قبل أن يتحول إلى صمت طويل.",
       "caption": "سمّه قبل أن يصير صمتًا طويلًا",
-      "visual_query": "dark city window reflection vertical",
+      "visual_query": "vertical dark city window bokeh night",
       "mood": "calm"
     }
   ],

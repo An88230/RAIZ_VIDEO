@@ -44,6 +44,12 @@ if (
 
 const blockPayloadJob = mapN8nRenderPayloadToRaizJob({
   video_id: "n8n-blocks-001",
+  series_title_ar: "الانطفاء اللامع",
+  series_title_en: "Luminous Extinction",
+  headline_main_word: "الانطفاء",
+  supporting_caption: "اللامع ليس كسلًا",
+  footer_text: "© 2025 Nabil88.ART",
+  mood: "dark",
   narration_blocks: [
     {
       block_id: "B01",
@@ -67,9 +73,15 @@ if (
   !blockPayloadJob.script.includes("النص الأول للصوت") ||
   blockPayloadJob.assets?.broll_source !== "pexels" ||
   blockPayloadJob.assets.search_terms?.join("|") !== "dark Arabic editorial office|night notebook writing" ||
-  blockPayloadJob.assets.broll_count !== 2
+  blockPayloadJob.assets.broll_count !== 2 ||
+  blockPayloadJob.series_title_ar !== "الانطفاء اللامع" ||
+  blockPayloadJob.series_title_en !== "Luminous Extinction" ||
+  blockPayloadJob.headline_main_word !== "الانطفاء" ||
+  blockPayloadJob.supporting_caption !== "اللامع ليس كسلًا" ||
+  blockPayloadJob.footer_text !== "© 2025 Nabil88.ART" ||
+  blockPayloadJob.mood !== "dark"
 ) {
-  throw new Error("Expected explicit narration_blocks to drive script and b-roll search terms.");
+  throw new Error("Expected explicit narration_blocks and locked template fields to drive the RAIZ job.");
 }
 
 // 2. voiceover text but no audio_url => voice.type "none". The render layer then

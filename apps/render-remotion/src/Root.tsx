@@ -22,6 +22,12 @@ export const RaizRoot: React.FC = () => {
         {
           hook: "إنت مش تعبان… إنت مُفرطن.",
           title: "",
+          seriesTitleAr: "",
+          seriesTitleEn: "",
+          headlineMainWord: "",
+          supportingCaption: "",
+          footerText: "",
+          mood: "minimal",
           captions: [],
           scenes: [],
           footer: "",

@@ -16,6 +16,7 @@ import {
   buildVisualPlan,
   fileUrlToLocalPath,
   maskUrl,
+  resolveAmbientPlan,
   resolveBrollPlan,
   resolveLocalRenderSupportPlan,
   resolveVoicePlan
@@ -178,6 +179,22 @@ try {
     pexelsPlan.folder !== resolve(repoRoot, "storage/assets/broll/pexels")
   ) {
     throw new Error("Expected pexels b-roll plan to fetch the first search term into the pexels folder.");
+  }
+
+  const ambientPlan = resolveAmbientPlan({ mood: "dark" }, { repoRoot });
+
+  if (
+    ambientPlan.mood !== "dark" ||
+    ambientPlan.track !== "dark_soft_pulse" ||
+    !["available", "missing_file"].includes(ambientPlan.status)
+  ) {
+    throw new Error("Expected mood=dark to map to dark_soft_pulse ambient track.");
+  }
+
+  const minimalAmbientPlan = resolveAmbientPlan({ mood: "unknown" }, { repoRoot });
+
+  if (minimalAmbientPlan.track !== "soft_noise_texture") {
+    throw new Error("Expected unknown mood to fall back to soft_noise_texture.");
   }
 
   const pexelsNoTerms = resolveBrollPlan({ assets: { broll_source: "pexels" } }, { repoRoot });

@@ -315,6 +315,40 @@ function logBrollWarnings(warnings) {
   }
 }
 
+export function resolveAmbientPlan(job, options = {}) {
+  const root = options.repoRoot ?? repoRoot;
+  const mood = typeof job.mood === "string" && job.mood.trim() ? job.mood.trim() : "minimal";
+  const track = AMBIENT_BY_MOOD[mood] ?? AMBIENT_BY_MOOD.minimal;
+  const ambientDir = resolve(root, "apps/render-remotion/public/ambient");
+  const warnings = [];
+
+  for (const ext of [".wav", ".mp3", ".m4a", ".aac"]) {
+    const candidate = resolve(ambientDir, `${track}${ext}`);
+
+    if (existsSync(candidate)) {
+      return {
+        mood,
+        track,
+        path: candidate,
+        status: "available",
+        warnings
+      };
+    }
+  }
+
+  warnings.push(
+    `Ambient track "${track}" for mood="${mood}" was not found in apps/render-remotion/public/ambient; rendering without ambient bed.`
+  );
+
+  return {
+    mood,
+    track,
+    path: null,
+    status: "missing_file",
+    warnings
+  };
+}
+
 export function maskUrl(url) {
   try {
     const parsed = new URL(url);
@@ -1191,14 +1225,19 @@ async function main() {
   const voicePlan = resolveVoicePlan(job);
   const renderSupportPlan = resolveLocalRenderSupportPlan(job);
   const brollPlan = resolveBrollPlan(job);
+  const ambientPlan = resolveAmbientPlan(job);
   logVoiceWarnings(voicePlan.warnings);
   logRenderSupportWarnings(renderSupportPlan.warnings);
   logBrollWarnings(brollPlan.warnings);
+  for (const warning of ambientPlan.warnings) {
+    console.warn(`[ambient][warning] ${warning}`);
+  }
 
   if (args.dryVoiceCheck) {
     console.log(`[voice] dry check source: ${voicePlan.source}`);
     console.log(`[render] dry check warnings: ${renderSupportPlan.warnings.length}`);
     console.log(`[broll] dry check plan: source=${brollPlan.source ?? "none"} fetch=${brollPlan.shouldFetch}`);
+    console.log(`[ambient] dry check mood=${ambientPlan.mood} track=${ambientPlan.track} status=${ambientPlan.status}`);
     return;
   }
 
@@ -1402,6 +1441,12 @@ async function main() {
   const props = {
     hook,
     title: job.title || "",
+    seriesTitleAr: job.series_title_ar || job.title || "",
+    seriesTitleEn: job.series_title_en || "",
+    headlineMainWord: job.headline_main_word || "",
+    supportingCaption: job.supporting_caption || "",
+    footerText: job.footer_text || visualPlan.footer || "© 2025 Nabil88.ART",
+    mood: job.mood || "minimal",
     captions: scriptCues,
     scenes: scenePlan,
     footer: visualPlan.footer,
@@ -1429,27 +1474,58 @@ async function main() {
   // 5. Audio: mux a verified external voice-over, or strip audio entirely.
   // We never ship Remotion's default silent AAC track and call it a success.
   if (voiceInputPath) {
-    run("FFmpeg mux audio", "ffmpeg", [
-      "-y",
-      "-i",
-      rawVideo,
-      "-i",
-      voiceInputPath,
-      "-map",
-      "0:v:0",
-      "-map",
-      "1:a:0",
-      "-c:v",
-      "copy",
-      "-c:a",
-      "aac",
-      "-b:a",
-      "192k",
-      "-movflags",
-      "+faststart",
-      "-shortest",
-      finalVideo
-    ]);
+    if (ambientPlan.path) {
+      const fadeOutStart = Math.max(0, durationSeconds - 1).toFixed(3);
+      run("FFmpeg mux audio with ducked ambient", "ffmpeg", [
+        "-y",
+        "-i",
+        rawVideo,
+        "-i",
+        voiceInputPath,
+        "-stream_loop",
+        "-1",
+        "-i",
+        ambientPlan.path,
+        "-filter_complex",
+        `[2:a]volume=0.045,afade=t=in:st=0:d=0.8,afade=t=out:st=${fadeOutStart}:d=0.8[ambient];[ambient][1:a]sidechaincompress=threshold=0.035:ratio=8:attack=20:release=300[ducked];[1:a][ducked]amix=inputs=2:duration=first:dropout_transition=0[a]`,
+        "-map",
+        "0:v:0",
+        "-map",
+        "[a]",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        "-shortest",
+        finalVideo
+      ]);
+    } else {
+      run("FFmpeg mux audio", "ffmpeg", [
+        "-y",
+        "-i",
+        rawVideo,
+        "-i",
+        voiceInputPath,
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        "-shortest",
+        finalVideo
+      ]);
+    }
   } else {
     run("FFmpeg finalize (no external audio; drop silent track)", "ffmpeg", [
       "-y",
@@ -1624,7 +1700,16 @@ async function main() {
       has_audio_track: hasAudioTrack,
       rms_db: audioRmsDb,
       silent_audio_detected: silentAudioDetected,
-      duration_seconds: audioDurationSeconds
+      duration_seconds: audioDurationSeconds,
+      ambient: {
+        mood: ambientPlan.mood,
+        track: ambientPlan.track,
+        status: ambientPlan.status,
+        file_path: ambientPlan.path,
+        ducking: ambientPlan.path ? "sidechaincompress_under_voice" : "not_applied",
+        gain: ambientPlan.path ? 0.045 : null,
+        warnings: ambientPlan.warnings
+      }
     },
     broll: {
       status: brollStatus,
