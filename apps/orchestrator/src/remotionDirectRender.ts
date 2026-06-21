@@ -51,7 +51,12 @@ export interface RemotionRenderQualitySummary {
   audio_status?: string;
   audio_path?: string | null;
   audio_stream_present?: boolean;
+  tts_mode?: string;
+  blocks_count?: number | null;
+  audio_blocks_count?: number | null;
+  sync_status?: string;
   broll_status?: string;
+  media_assets_count?: number | null;
   captions_count?: number;
   scenes_count?: number | null;
   audio_rms_db?: number | null;
@@ -283,7 +288,12 @@ export async function renderJobWithRemotionDirect(
         audio_status: quality.audio_status ?? null,
         audio_path: quality.audio_path ?? null,
         audio_stream_present: quality.audio_stream_present ?? null,
+        tts_mode: quality.tts_mode ?? null,
+        blocks_count: quality.blocks_count ?? null,
+        audio_blocks_count: quality.audio_blocks_count ?? null,
+        sync_status: quality.sync_status ?? null,
         broll_status: quality.broll_status ?? null,
+        media_assets_count: quality.media_assets_count ?? null,
         captions_count: quality.captions_count ?? null,
         scenes_count: quality.scenes_count ?? null,
         audio_rms_db: quality.audio_rms_db ?? null,
@@ -374,7 +384,12 @@ async function readRenderDiagnostics(path: string): Promise<{
       audio_status?: string;
       audio_path?: string | null;
       audio_stream_present?: boolean;
+      tts_mode?: string;
+      blocks_count?: number;
+      audio_blocks_count?: number;
+      sync_status?: string;
       broll_status?: string;
+      media_assets_count?: number;
       captions_count?: number;
       scenes_count?: number | null;
       audio_rms_db?: number | null;
@@ -392,7 +407,12 @@ async function readRenderDiagnostics(path: string): Promise<{
           audio_status: parsed.audio_status,
           audio_path: parsed.audio_path ?? null,
           audio_stream_present: parsed.audio_stream_present,
+          tts_mode: parsed.tts_mode,
+          blocks_count: parsed.blocks_count,
+          audio_blocks_count: parsed.audio_blocks_count,
+          sync_status: parsed.sync_status,
           broll_status: parsed.broll_status,
+          media_assets_count: parsed.media_assets_count,
           captions_count: parsed.captions_count,
           scenes_count: parsed.scenes_count ?? null,
           audio_rms_db: parsed.audio_rms_db ?? null,
@@ -444,7 +464,12 @@ function resolveQualitySummary(
     audio_status: result.audio?.status ?? "unknown",
     audio_path: null,
     audio_stream_present: result.audio?.has_audio_track,
+    tts_mode: "single_or_external",
+    blocks_count: null,
+    audio_blocks_count: null,
+    sync_status: "unverified",
     broll_status: "unknown",
+    media_assets_count: null,
     captions_count: result.visual?.caption_cue_count,
     scenes_count: scenesCount,
     audio_rms_db: null,

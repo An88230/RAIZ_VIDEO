@@ -25,6 +25,8 @@ export interface ScenePlan {
   fromSec: number;
   toSec: number;
   bgVariant?: number;
+  brollSrc?: string;
+  brollDurationInSeconds?: number;
 }
 
 export interface RaizDarkHook01Props {
@@ -104,7 +106,20 @@ const ContentScene: React.FC<{
 
   return (
     <AbsoluteFill>
-      <AbsoluteFill style={{ backgroundColor: tint }} />
+      {scene.brollSrc ? (
+        <AbsoluteFill>
+          {scene.brollDurationInSeconds && scene.brollDurationInSeconds > 0 ? (
+            <Loop durationInFrames={Math.max(1, Math.round(scene.brollDurationInSeconds * fps))}>
+              <OffthreadVideo src={staticFile(scene.brollSrc)} muted style={fillVideoStyle} />
+            </Loop>
+          ) : (
+            <OffthreadVideo src={staticFile(scene.brollSrc)} muted style={fillVideoStyle} />
+          )}
+          <AbsoluteFill style={{ backgroundColor: "rgba(0,0,0,0.54)" }} />
+        </AbsoluteFill>
+      ) : (
+        <AbsoluteFill style={{ backgroundColor: tint }} />
+      )}
 
       {scene.heading?.trim() ? (
         <div style={{ position: "absolute", top: 120, left: 90, right: 90, textAlign: "center", opacity: opacity * 0.85 }}>

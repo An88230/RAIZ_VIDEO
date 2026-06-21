@@ -1,0 +1,41 @@
+{
+  "video_id": "RAIZ-SAMPLE-GEMINI-BROLL-001",
+  "template": "new_era_dark_editorial",
+  "format": "9:16",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "duration": 30,
+  "language": "ar",
+  "rtl": true,
+  "topic": "الانطفاء اللامع",
+  "angle": "إنت مش تعبان... إنت محتاج تسمي الشعور",
+  "tts_provider": "gemini",
+  "narration_blocks": [
+    {
+      "block_id": "B01",
+      "voiceover_text": "الانطفاء اللامع ليس كسلًا.",
+      "caption": "الانطفاء اللامع ليس كسلًا",
+      "visual_query": "portrait night office laptop glow",
+      "mood": "quiet"
+    },
+    {
+      "block_id": "B02",
+      "voiceover_text": "هو أن تبدو حاضرًا، بينما داخلك يطلب استراحة.",
+      "caption": "تبدو حاضرًا... وداخلك يطلب استراحة",
+      "visual_query": "person writing journal at night close up",
+      "mood": "reflective"
+    },
+    {
+      "block_id": "B03",
+      "voiceover_text": "سمّه قبل أن يتحول إلى صمت طويل.",
+      "caption": "سمّه قبل أن يصير صمتًا طويلًا",
+      "visual_query": "dark city window reflection vertical",
+      "mood": "calm"
+    }
+  ],
+  "brand": {
+    "footer": "© 2025 Nabil88 | nabil88.art"
+  },
+  "_note": "Requires RAIZ_TTS_PROVIDER=gemini and GEMINI_API_KEY in local .env. PEXELS_API_KEY/PIXABAY_API_KEY are optional; without them render uses abstract_fallback and publish_ready=false. No API keys belong in this file."
+}

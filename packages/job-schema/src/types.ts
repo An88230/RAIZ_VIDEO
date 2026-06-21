@@ -23,7 +23,20 @@ export interface RaizJob {
   title: string;
   hook?: string;
   duration_seconds?: number;
+  series_title_ar?: string;
+  series_title_en?: string;
+  headline_main_word?: string;
+  supporting_caption?: string;
+  footer_text?: string;
+  mood?: "calm" | "dark" | "emotional" | "minimal";
   script: string;
+  narration_blocks?: Array<{
+    block_id: string;
+    voiceover_text: string;
+    caption: string;
+    visual_query: string;
+    mood: string;
+  }>;
   template: {
     engine: RaizTemplateEngine;
     template_id: string;

@@ -37,6 +37,14 @@ export class N8nRenderPreflightError extends Error {
   }
 }
 
+interface N8nNarrationBlock {
+  block_id: string;
+  voiceover_text: string;
+  caption: string;
+  visual_query: string;
+  mood: string;
+}
+
 export async function renderN8nPayloadWithRemotionDirect(
   payload: unknown,
   renderer: RemotionRenderer,
@@ -96,7 +104,8 @@ export function mapN8nRenderPayloadToRaizJob(payload: unknown): RaizJob {
   const height = optionalNumber(source, "height") ?? 1920;
   const language = optionalString(source, "language") ?? "ar";
   const rtl = optionalBoolean(source, "rtl") ?? true;
-  const script = buildScript(source);
+  const payloadBlocks = collectNarrationBlocks(source);
+  const script = buildScript(source, payloadBlocks);
   const externalAudioUrl = findExternalAudioUrl(source);
   const durationSeconds = optionalNumber(source, "duration") ?? optionalNumber(source, "duration_seconds");
 
@@ -131,10 +140,13 @@ export function mapN8nRenderPayloadToRaizJob(payload: unknown): RaizJob {
   const safeJobId = jobId as string;
   const template = optionalString(source, "template") ?? "raiz_dark_hook_01";
   const templateId = template.startsWith("raiz_") ? template : "raiz_dark_hook_01";
-  const searchTerms = collectSearchTerms(source);
   const title = optionalString(source, "topic") ?? safeJobId;
   const hook = optionalString(source, "angle") ?? firstLine(script) ?? title;
-  const footer = getNestedString(source.brand, "footer");
+  const narrationBlocks =
+    payloadBlocks.length > 0 ? payloadBlocks : buildLegacyNarrationBlocks(source, { script, hook, title });
+  const searchTerms = collectSearchTerms(source, payloadBlocks.length > 0 ? narrationBlocks : []);
+  const footer = optionalString(source, "footer_text") ?? getNestedString(source.brand, "footer") ?? "© 2025 Nabil88.ART";
+  const mood = optionalMood(source, "mood");
   const job: RaizJob = {
     job_id: safeJobId,
     platform: "youtube_shorts",
@@ -148,7 +160,18 @@ export function mapN8nRenderPayloadToRaizJob(payload: unknown): RaizJob {
     title,
     hook,
     ...(durationSeconds && durationSeconds > 0 ? { duration_seconds: durationSeconds } : {}),
+    ...(optionalString(source, "series_title_ar") ? { series_title_ar: optionalString(source, "series_title_ar") as string } : {}),
+    ...(optionalString(source, "series_title_en") ? { series_title_en: optionalString(source, "series_title_en") as string } : {}),
+    ...(optionalString(source, "headline_main_word")
+      ? { headline_main_word: optionalString(source, "headline_main_word") as string }
+      : {}),
+    ...(optionalString(source, "supporting_caption")
+      ? { supporting_caption: optionalString(source, "supporting_caption") as string }
+      : {}),
+    footer_text: footer,
+    ...(mood ? { mood } : {}),
     script,
+    narration_blocks: narrationBlocks,
     template: {
       engine: "remotion_direct",
       template_id: templateId,
@@ -187,7 +210,7 @@ export function mapN8nRenderPayloadToRaizJob(payload: unknown): RaizJob {
     publish: {
       youtube: false,
       mode: "manual_only",
-      ...(footer ? { description: footer } : {})
+      description: footer
     }
   };
   const validation = validateRaizJob(job);
@@ -254,12 +277,26 @@ function optionalBoolean(source: Record<string, unknown>, key: string): boolean 
   return null;
 }
 
-function buildScript(source: Record<string, unknown>): string {
+function optionalMood(source: Record<string, unknown>, key: string): "calm" | "dark" | "emotional" | "minimal" | null {
+  const value = optionalString(source, key);
+
+  if (value === "calm" || value === "dark" || value === "emotional" || value === "minimal") {
+    return value;
+  }
+
+  return null;
+}
+
+function buildScript(source: Record<string, unknown>, narrationBlocks: N8nNarrationBlock[] = []): string {
   // Merge narration + on-screen text, but dedupe at the LINE level. The bug was
   // that a multi-line `voiceover` string and identical `captions`/`scenes` lines
   // never compared equal as whole strings, so the same words rendered twice
   // (the script ended up holding the full message two or three times over).
   const lines: string[] = [];
+
+  for (const block of narrationBlocks) {
+    lines.push(block.voiceover_text);
+  }
 
   const voiceover = optionalString(source, "voiceover");
 
@@ -271,6 +308,86 @@ function buildScript(source: Record<string, unknown>): string {
   lines.push(...textListFromUnknown(source.scenes));
 
   return dedupeStrings(lines).join("\n");
+}
+
+function collectNarrationBlocks(source: Record<string, unknown>): N8nNarrationBlock[] {
+  const value = source.narration_blocks;
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry, index) => normalizeNarrationBlock(entry, index))
+    .filter((block): block is N8nNarrationBlock => Boolean(block));
+}
+
+function normalizeNarrationBlock(value: unknown, index: number): N8nNarrationBlock | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const voiceoverText = firstString(record, ["voiceover_text", "voiceover", "text", "script"]);
+  const caption = firstString(record, ["caption", "on_screen_text", "text"]) ?? voiceoverText;
+  const visualQuery = firstString(record, ["visual_query", "visual", "broll_query", "search_query"]) ?? caption;
+
+  if (!voiceoverText || !caption || !visualQuery) {
+    return null;
+  }
+
+  return {
+    block_id: firstString(record, ["block_id", "id", "scene_id"]) ?? formatBlockId(index),
+    voiceover_text: voiceoverText,
+    caption,
+    visual_query: visualQuery,
+    mood: firstString(record, ["mood", "tone"]) ?? "neutral"
+  };
+}
+
+function buildLegacyNarrationBlocks(
+  source: Record<string, unknown>,
+  input: { script: string; hook: string; title: string }
+): N8nNarrationBlock[] {
+  const captions = dedupeStrings([...textListFromUnknown(source.captions), ...textListFromUnknown(source.scenes)]);
+  const voiceLines = dedupeStrings(input.script.split(/\r?\n/));
+  const lines = captions.length > 0 ? captions : voiceLines;
+
+  if (lines.length === 0) {
+    return [
+      {
+        block_id: "B01",
+        voiceover_text: input.script,
+        caption: input.hook || input.title,
+        visual_query: input.title,
+        mood: "neutral"
+      }
+    ];
+  }
+
+  return lines.map((line, index) => ({
+    block_id: formatBlockId(index),
+    voiceover_text: voiceLines[index] ?? line,
+    caption: line,
+    visual_query: visualQueryForLegacyBlock(source, index) ?? line,
+    mood: "neutral"
+  }));
+}
+
+function visualQueryForLegacyBlock(source: Record<string, unknown>, index: number): string | null {
+  const scenes = source.scenes;
+
+  if (!Array.isArray(scenes)) {
+    return null;
+  }
+
+  const scene = scenes[index];
+
+  if (!scene || typeof scene !== "object" || Array.isArray(scene)) {
+    return null;
+  }
+
+  return firstString(scene as Record<string, unknown>, ["visual_query", "visual", "caption", "text"]);
 }
 
 function textListFromUnknown(value: unknown): string[] {
@@ -299,11 +416,16 @@ function textListFromUnknown(value: unknown): string[] {
   });
 }
 
-function collectSearchTerms(source: Record<string, unknown>): string[] {
+function collectSearchTerms(source: Record<string, unknown>, narrationBlocks: N8nNarrationBlock[] = []): string[] {
   const terms = new Set<string>();
+
+  for (const block of narrationBlocks) {
+    collectTermValue(block.visual_query, terms);
+  }
 
   collectTermsFromUnknown(source.beats, terms);
   collectTermsFromUnknown(source.scenes, terms);
+  collectTermsFromUnknown(source.narration_blocks, terms);
 
   return [...terms];
 }
@@ -320,7 +442,16 @@ function collectTermsFromUnknown(value: unknown, terms: Set<string>): void {
 
     const record = entry as Record<string, unknown>;
 
-    for (const key of ["broll_search_terms", "brollSearchTerms", "search_terms", "searchTerms", "broll_terms"]) {
+    for (const key of [
+      "visual_query",
+      "visual",
+      "broll_query",
+      "broll_search_terms",
+      "brollSearchTerms",
+      "search_terms",
+      "searchTerms",
+      "broll_terms"
+    ]) {
       collectTermValue(record[key], terms);
     }
   }
@@ -428,4 +559,8 @@ function firstLine(value: string): string | null {
     .find(Boolean);
 
   return line ?? null;
+}
+
+function formatBlockId(index: number): string {
+  return `B${String(index + 1).padStart(2, "0")}`;
 }

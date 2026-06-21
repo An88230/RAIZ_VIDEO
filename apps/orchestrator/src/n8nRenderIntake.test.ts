@@ -34,6 +34,44 @@ if (scriptLines.length !== 3 || new Set(scriptLines).size !== 3) {
   throw new Error(`Expected a deduped 3-line script, got ${scriptLines.length}: ${JSON.stringify(scriptLines)}`);
 }
 
+if (
+  dedupeJob.narration_blocks?.length !== 3 ||
+  dedupeJob.narration_blocks[0].block_id !== "B01" ||
+  dedupeJob.narration_blocks[0].caption !== "سطر أول"
+) {
+  throw new Error("Expected legacy voiceover/captions payload to map into narration_blocks.");
+}
+
+const blockPayloadJob = mapN8nRenderPayloadToRaizJob({
+  video_id: "n8n-blocks-001",
+  narration_blocks: [
+    {
+      block_id: "B01",
+      voiceover_text: "النص الأول للصوت",
+      caption: "النص الأول على الشاشة",
+      visual_query: "dark Arabic editorial office",
+      mood: "quiet"
+    },
+    {
+      block_id: "B02",
+      voiceover_text: "النص الثاني للصوت",
+      caption: "النص الثاني على الشاشة",
+      visual_query: "night notebook writing",
+      mood: "reflective"
+    }
+  ]
+});
+
+if (
+  blockPayloadJob.narration_blocks?.length !== 2 ||
+  !blockPayloadJob.script.includes("النص الأول للصوت") ||
+  blockPayloadJob.assets?.broll_source !== "pexels" ||
+  blockPayloadJob.assets.search_terms?.join("|") !== "dark Arabic editorial office|night notebook writing" ||
+  blockPayloadJob.assets.broll_count !== 2
+) {
+  throw new Error("Expected explicit narration_blocks to drive script and b-roll search terms.");
+}
+
 // 2. voiceover text but no audio_url => voice.type "none". The render layer then
 // ships no audio track rather than a silent stream presented as success.
 const noAudioJob = mapN8nRenderPayloadToRaizJob({

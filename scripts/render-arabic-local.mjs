@@ -25,7 +25,6 @@ import {
 import { basename, dirname, extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { fetchPexelsBroll } from "./fetch-pexels-broll.mjs";
 import { generateGeminiTts } from "./gemini-tts.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -46,6 +45,12 @@ const SAY_VOICE = "Majed";
 // Audio at or below this mean volume (dB) is treated as effectively silent.
 const SILENCE_DB_THRESHOLD = -60;
 const NO_EXTERNAL_AUDIO_SOURCE = "no_external_audio";
+const AMBIENT_BY_MOOD = {
+  calm: "warm_room_tone",
+  dark: "dark_soft_pulse",
+  emotional: "cinematic_low_pad",
+  minimal: "soft_noise_texture"
+};
 
 function parseArgs(argv) {
   const args = { job: "samples/valid-arabic-9x16-job.json", out: null, dryVoiceCheck: false };
@@ -490,6 +495,251 @@ function capture(command, commandArgs, options = {}) {
   return result.stdout.trim();
 }
 
+function concatAudioBlocks(audioBlocks, outPath, listPath) {
+  const list = audioBlocks
+    .map((block) => `file '${String(block.audio_path).replace(/'/g, "'\\''")}'`)
+    .join("\n");
+  writeFileSync(listPath, `${list}\n`, "utf8");
+  run("FFmpeg concat block audio", "ffmpeg", [
+    "-y",
+    "-f",
+    "concat",
+    "-safe",
+    "0",
+    "-i",
+    listPath,
+    "-c:a",
+    "pcm_s16le",
+    outPath
+  ]);
+}
+
+function createMediaHttpClient() {
+  return {
+    async get(url, options = {}) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 30000);
+      try {
+        return await fetch(url, { ...options, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  };
+}
+
+export async function acquireBlockBrollAssets({
+  blocks,
+  mediaDir,
+  source = "none",
+  pexelsApiKey,
+  pixabayApiKey,
+  httpClient = createMediaHttpClient(),
+  logger = console
+}) {
+  mkdirSync(mediaDir, { recursive: true });
+
+  if (!["pexels", "pixabay"].includes(source)) {
+    return {
+      status: "abstract_fallback",
+      assets: [],
+      warnings: [`broll_source="${source || "none"}" does not request licensed search media.`]
+    };
+  }
+
+  if (source === "pixabay") {
+    if (!pixabayApiKey) {
+      return {
+        status: "abstract_fallback",
+        assets: [],
+        warnings: ["PIXABAY_API_KEY is not set; using abstract_fallback."]
+      };
+    }
+
+    return {
+      status: "abstract_fallback",
+      assets: [],
+      warnings: ["Pixabay video acquisition is reserved; current local media search uses Pexels only."]
+    };
+  }
+
+  if (!pexelsApiKey) {
+    return {
+      status: "abstract_fallback",
+      assets: [],
+      warnings: ["PEXELS_API_KEY is not set; using abstract_fallback."]
+    };
+  }
+
+  const assets = [];
+  const warnings = [];
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    const blockId = formatBlockId(index);
+    const query = block.visual_query || block.caption || block.voiceover_text;
+    const searchUrl = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&per_page=5&size=medium`;
+    let response;
+
+    try {
+      response = await httpClient.get(searchUrl, {
+        headers: { Authorization: pexelsApiKey },
+        timeoutMs: 30000
+      });
+    } catch (error) {
+      warnings.push(`Pexels search failed for ${blockId}: ${error.message}`);
+      continue;
+    }
+
+    if (!response.ok) {
+      warnings.push(`Pexels search failed for ${blockId}: HTTP ${response.status}`);
+      continue;
+    }
+
+    const data = await response.json();
+    const video = pickLicensedPexelsVideo(Array.isArray(data.videos) ? data.videos : []);
+
+    if (!video) {
+      warnings.push(`No licensed Pexels video with required metadata was found for ${blockId}.`);
+      continue;
+    }
+
+    const localPath = resolve(mediaDir, `${blockId}.mp4`);
+    const download = await downloadLicensedVideo(httpClient, video.rendition.link, localPath, logger);
+
+    if (!download.ok) {
+      warnings.push(`${blockId}: ${download.error}`);
+      continue;
+    }
+
+    const metadata = {
+      block_id: blockId,
+      local_path: localPath,
+      source: "pexels",
+      source_asset_id: String(video.id),
+      source_url: video.source_url,
+      creator_name: video.creator_name,
+      creator_url: video.creator_url,
+      license_type: "Pexels License",
+      license_checked_at: new Date().toISOString(),
+      width: video.rendition.width,
+      height: video.rendition.height,
+      duration_sec: video.duration_sec,
+      query_used: query,
+      match_score: video.rendition.height > video.rendition.width ? 1 : 0.75,
+      safe_status: "needs_review",
+      safety_note: "Provider metadata is present; face/logo detection is not implemented in local v1."
+    };
+    writeFileSync(resolve(mediaDir, `${blockId}.metadata.json`), `${JSON.stringify(metadata, null, 2)}\n`);
+    assets.push(metadata);
+  }
+
+  writeFileSync(
+    resolve(mediaDir, "media-manifest.json"),
+    `${JSON.stringify(
+      {
+        status: assets.length === blocks.length && assets.length > 0 ? "licensed_broll" : assets.length > 0 ? "partial_broll" : "abstract_fallback",
+        assets,
+        warnings,
+        created_at: new Date().toISOString()
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  return {
+    status: assets.length === blocks.length && assets.length > 0 ? "licensed_broll" : assets.length > 0 ? "partial_broll" : "abstract_fallback",
+    assets,
+    warnings
+  };
+}
+
+function pickLicensedPexelsVideo(videos) {
+  for (const video of videos) {
+    const sourceUrl = typeof video?.url === "string" && video.url.trim() ? video.url.trim() : null;
+    const rendition = pickPexelsRendition(video?.video_files);
+
+    if (!sourceUrl || !rendition?.link) {
+      continue;
+    }
+
+    return {
+      id: video.id,
+      source_url: sourceUrl,
+      creator_name: typeof video.user?.name === "string" ? video.user.name : null,
+      creator_url: typeof video.user?.url === "string" ? video.user.url : null,
+      duration_sec: Number.isFinite(video.duration) ? video.duration : null,
+      rendition
+    };
+  }
+
+  return null;
+}
+
+function pickPexelsRendition(videoFiles) {
+  if (!Array.isArray(videoFiles)) {
+    return null;
+  }
+
+  const candidates = videoFiles.filter(
+    (file) =>
+      file &&
+      typeof file.link === "string" &&
+      file.link.trim() &&
+      Number.isFinite(file.width) &&
+      Number.isFinite(file.height) &&
+      file.width > 0 &&
+      file.height > 0
+  );
+  const portrait = candidates.filter((file) => file.height >= file.width);
+  const pool = portrait.length > 0 ? portrait : candidates;
+
+  if (pool.length === 0) {
+    return null;
+  }
+
+  pool.sort((a, b) => Math.abs(a.width - 1080) - Math.abs(b.width - 1080));
+  return pool[0];
+}
+
+async function downloadLicensedVideo(httpClient, url, dest, logger) {
+  try {
+    const response = await httpClient.get(url, { timeoutMs: 120000 });
+
+    if (!response.ok) {
+      return { ok: false, error: `licensed media download failed: HTTP ${response.status}` };
+    }
+
+    const contentType = getResponseHeader(response, "content-type");
+
+    if (!contentType.toLowerCase().startsWith("video/")) {
+      return { ok: false, error: `licensed media rejected: content-type ${contentType || "missing"} is not video/*` };
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    if (buffer.length === 0) {
+      return { ok: false, error: "licensed media rejected: empty video response" };
+    }
+
+    writeFileSync(dest, buffer);
+    return { ok: true };
+  } catch (error) {
+    const message = `licensed media download error: ${error.message}`;
+    logger.warn?.(`[broll][warning] ${message}`);
+    return { ok: false, error: message };
+  }
+}
+
+function getResponseHeader(response, name) {
+  if (typeof response.headers?.get === "function") {
+    return response.headers.get(name) ?? "";
+  }
+
+  return response.headers?.[name] ?? response.headers?.[name.toLowerCase()] ?? "";
+}
+
 // Mean loudness (dB) via ffmpeg volumedetect. Returns null if unmeasurable.
 // Digital silence reports about -91 dB, so it never passes the silence gate.
 function measureMeanVolumeDb(mediaPath) {
@@ -651,6 +901,180 @@ function chunkText(text, maxWords = 7) {
   return chunks.length > 0 ? chunks : [text.trim()].filter(Boolean);
 }
 
+function formatBlockId(index) {
+  return `B${String(index + 1).padStart(2, "0")}`;
+}
+
+export function buildNarrationBlocks(job, { hook = "", script = "" } = {}) {
+  const declared = Array.isArray(job.narration_blocks) ? job.narration_blocks : [];
+  const normalized = declared
+    .map((block, index) => normalizeNarrationBlock(block, index))
+    .filter(Boolean);
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  const scriptChunks = chunkText(script, 9);
+  const lines = scriptChunks.length > 0 ? scriptChunks : [hook || job.title || "RAIZ"].filter(Boolean);
+
+  return lines.map((line, index) => ({
+    block_id: formatBlockId(index),
+    voiceover_text: line,
+    caption: line,
+    visual_query: line,
+    mood: "neutral"
+  }));
+}
+
+function normalizeNarrationBlock(value, index) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const voiceoverText = firstNonEmptyString(value.voiceover_text, value.voiceover, value.text, value.script);
+  const caption = firstNonEmptyString(value.caption, value.on_screen_text, value.text, voiceoverText);
+  const visualQuery = firstNonEmptyString(value.visual_query, value.visual, value.broll_query, value.search_query, caption);
+
+  if (!voiceoverText || !caption || !visualQuery) {
+    return null;
+  }
+
+  return {
+    block_id: firstNonEmptyString(value.block_id, value.id, value.scene_id) || formatBlockId(index),
+    voiceover_text: voiceoverText,
+    caption,
+    visual_query: visualQuery,
+    mood: firstNonEmptyString(value.mood, value.tone) || "neutral"
+  };
+}
+
+function firstNonEmptyString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+export async function generateGeminiTtsForBlocks({
+  blocks,
+  audioDir,
+  apiKey,
+  voiceName,
+  ttsGenerator = generateGeminiTts,
+  durationProbe = probeDurationSeconds,
+  logger = console
+}) {
+  mkdirSync(audioDir, { recursive: true });
+  const audioBlocks = [];
+  const errors = [];
+
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    const blockId = formatBlockId(index);
+    const outPath = resolve(audioDir, `${blockId}.wav`);
+    logger.log(`[voice] generating Gemini TTS block ${blockId} -> ${outPath}`);
+    const result = await ttsGenerator({
+      apiKey,
+      text: block.voiceover_text,
+      outPath,
+      voiceName
+    });
+
+    if (!result.ok) {
+      errors.push(`Gemini TTS failed for ${blockId}: ${result.error || result.status || "unknown error"}`);
+      continue;
+    }
+
+    const durationSec = durationProbe(outPath);
+    audioBlocks.push({
+      ...block,
+      block_id: blockId,
+      audio_path: outPath,
+      duration_sec: Number(durationSec.toFixed(3))
+    });
+  }
+
+  return {
+    ok: errors.length === 0 && audioBlocks.length === blocks.length,
+    audioBlocks,
+    errors
+  };
+}
+
+export function buildBlockTimelineFromDurations(blocksWithAudio) {
+  let cursor = 0;
+
+  return blocksWithAudio.map((block) => {
+    const startSec = Number(cursor.toFixed(3));
+    cursor += block.duration_sec;
+    const endSec = Number(cursor.toFixed(3));
+
+    return {
+      ...block,
+      start_sec: startSec,
+      end_sec: endSec,
+      timing_source: "audio_duration"
+    };
+  });
+}
+
+export function buildEstimatedBlockTimeline(blocks, totalDuration) {
+  const safeDuration = Number.isFinite(totalDuration) && totalDuration > 0 ? totalDuration : 10;
+  const weights = blocks.map((block) => Math.max(1, [...block.voiceover_text].length));
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0) || blocks.length || 1;
+  let cursor = 0;
+
+  return blocks.map((block, index) => {
+    const startSec = Number(cursor.toFixed(3));
+    const share = index === blocks.length - 1 ? safeDuration - cursor : (safeDuration * weights[index]) / totalWeight;
+    cursor = index === blocks.length - 1 ? safeDuration : Math.min(safeDuration, cursor + share);
+
+    return {
+      ...block,
+      start_sec: startSec,
+      end_sec: Number(cursor.toFixed(3)),
+      timing_source: "estimated_duration"
+    };
+  });
+}
+
+export function captionsFromBlockTimeline(blockTimeline) {
+  return blockTimeline.map((block) => ({
+    block_id: block.block_id,
+    text: block.caption,
+    fromSec: block.start_sec,
+    toSec: block.end_sec
+  }));
+}
+
+export function scenesFromBlockTimeline(blockTimeline, { title = "", footer = "", mediaAssets = [] } = {}) {
+  const mediaByBlock = new Map(mediaAssets.map((asset) => [asset.block_id, asset]));
+
+  return blockTimeline.map((block, index) => {
+    const asset = mediaByBlock.get(block.block_id);
+
+    return {
+      kind: "content",
+      heading: title,
+      text: block.caption,
+      fromSec: block.start_sec,
+      toSec: block.end_sec,
+      bgVariant: index % 5,
+      footer,
+      ...(asset?.public_src
+        ? {
+            brollSrc: asset.public_src,
+            brollDurationInSeconds: asset.duration_sec
+          }
+        : {})
+    };
+  });
+}
+
 function buildCues(hook, script, totalDuration) {
   const hookChars = [...hook].length;
   const scriptChars = [...script].length;
@@ -737,6 +1161,10 @@ async function main() {
   if (!script) {
     throw new Error("Job has no script text to narrate.");
   }
+  const narrationBlocks = buildNarrationBlocks(job, { hook, script });
+  if (narrationBlocks.length === 0) {
+    throw new Error("Job has no narration blocks to render.");
+  }
 
   const outDir = resolve(repoRoot, args.out || `storage/renders/${jobId}`);
   mkdirSync(outDir, { recursive: true });
@@ -746,6 +1174,8 @@ async function main() {
       ? job.output.filename
       : `${jobId}.mp4`;
   const voiceAiff = resolve(outDir, "voice.aiff");
+  const audioDir = basename(outDir) === "output" ? resolve(outDir, "..", "audio") : resolve(outDir, "audio");
+  const mediaDir = basename(outDir) === "output" ? resolve(outDir, "..", "media") : resolve(outDir, "media");
   const rawVideo = resolve(outDir, "raw.mp4");
   const finalVideo = resolve(outDir, outputFilename);
   const propsPath = resolve(outDir, "remotion-props.json");
@@ -777,6 +1207,10 @@ async function main() {
   let audioOrigin = "none";
   let ttsError = null;
   let audioPath = null;
+  let audioDurationSeconds = null;
+  let blockTimeline = null;
+  let audioBlocks = [];
+  let ttsMode = "none";
   const audioSummary = {
     source: voicePlan.source,
     status: "silent_render",
@@ -797,30 +1231,40 @@ async function main() {
       );
     }
 
-    const ttsText = (job.voiceover_text || job.voiceover || job.script_final_arabic || script || "").toString();
-    const audioDir = basename(outDir) === "output" ? resolve(outDir, "..", "audio") : resolve(outDir, "audio");
     mkdirSync(audioDir, { recursive: true });
     const voiceoverWav = resolve(audioDir, "voiceover.wav");
-    console.log(`\n[voice] generating Gemini TTS voice-over -> ${voiceoverWav}`);
+    const concatListPath = resolve(audioDir, "voiceover.concat.txt");
+    console.log(`\n[voice] generating Gemini TTS per block -> ${audioDir}`);
 
-    const tts = await generateGeminiTts({
+    const tts = await generateGeminiTtsForBlocks({
+      blocks: narrationBlocks,
+      audioDir,
       apiKey,
-      text: ttsText,
-      outPath: voiceoverWav,
       voiceName: process.env.RAIZ_TTS_VOICE
     });
 
     if (tts.ok) {
+      concatAudioBlocks(tts.audioBlocks, voiceoverWav, concatListPath);
       voiceInputPath = voiceoverWav;
       audioPath = voiceoverWav;
+      audioBlocks = tts.audioBlocks;
+      blockTimeline = buildBlockTimelineFromDurations(tts.audioBlocks);
+      audioDurationSeconds = Number(blockTimeline[blockTimeline.length - 1].end_sec.toFixed(3));
       audioOrigin = "gemini";
+      ttsMode = "per_block";
       audioSummary.source = "gemini_tts";
       audioSummary.status = "generated_by_gemini";
       audioSummary.external_audio_attached = true;
       audioSummary.file_path = voiceoverWav;
+      audioSummary.blocks = tts.audioBlocks.map((block) => ({
+        block_id: block.block_id,
+        audio_path: block.audio_path,
+        duration_sec: block.duration_sec
+      }));
     } else {
       audioOrigin = "tts_failed";
-      ttsError = tts.error || "Gemini TTS failed.";
+      ttsMode = "per_block";
+      ttsError = tts.errors.join("; ") || "Gemini TTS failed.";
       audioSummary.source = "gemini_tts";
       audioSummary.status = "tts_failed";
       audioSummary.warnings.push(ttsError);
@@ -832,6 +1276,7 @@ async function main() {
     voiceInputPath = voiceAiff;
     audioPath = voiceAiff;
     audioOrigin = "external_file";
+    ttsMode = "single_external";
     audioSummary.status = "attached";
     audioSummary.external_audio_attached = true;
     audioSummary.file_path = voicePlan.externalPath;
@@ -843,6 +1288,7 @@ async function main() {
       voiceInputPath = voiceAiff;
       audioPath = voiceAiff;
       audioOrigin = "external_url";
+      ttsMode = "single_external";
       audioSummary.status = "attached";
       audioSummary.external_audio_attached = true;
     } else {
@@ -859,7 +1305,7 @@ async function main() {
       : typeof job.duration === "number" && job.duration > 0
         ? job.duration
         : null;
-  const audioDurationSeconds = voiceInputPath ? probeDurationSeconds(voiceInputPath) : null;
+  audioDurationSeconds = audioDurationSeconds ?? (voiceInputPath ? probeDurationSeconds(voiceInputPath) : null);
   const durationSeconds = audioDurationSeconds ?? requestedDuration ?? 10;
   const durationSource = audioDurationSeconds ? "audio" : requestedDuration ? "job_requested" : "default";
   console.log(
@@ -867,19 +1313,19 @@ async function main() {
   );
 
   // 3. Captions.
-  const { scriptCues, allCues } = buildCues(hook, script, durationSeconds);
+  blockTimeline = blockTimeline ?? buildEstimatedBlockTimeline(narrationBlocks, durationSeconds);
+  const allCues = captionsFromBlockTimeline(blockTimeline);
+  const scriptCues = allCues;
   const visualPlan = buildVisualPlan({
     title: job.title || "",
     hook,
     captions: allCues,
     footer: job.publish?.description || ""
   });
-  const scenePlan = buildScenePlan({
+  let scenePlan = scenesFromBlockTimeline(blockTimeline, {
     title: job.title || "",
-    hook,
-    script,
     footer: job.publish?.description || "",
-    duration: durationSeconds
+    mediaAssets: []
   });
 
   if (visualPlan.layerCount === 0) {
@@ -890,47 +1336,54 @@ async function main() {
   writeFileSync(assPath, buildAss(allCues), "utf8");
   console.log(`[captions] wrote ${allCues.length} cues -> captions.srt, captions.ass`);
 
-  // 3.5 Background b-roll (optional): a local folder, or an optional Pexels fetch
-  // driven by assets.search_terms. Both are graceful — any miss falls back to a
-  // solid dark background. The network fetch only runs when a PEXELS_API_KEY is set.
+  // 3.5 Background b-roll (optional): block-level licensed media search.
+  // Missing keys or missing matches are graceful and produce abstract_fallback.
   let brollSrc;
   let brollDurationSeconds;
-  let publicBrollPath;
-  if (brollPlan.source === "pexels" && brollPlan.shouldFetch) {
-    const apiKey = process.env.PEXELS_API_KEY;
-    if (apiKey) {
-      console.log(`\n[broll] pexels fetch: "${brollPlan.query}" (up to ${brollPlan.count}) -> ${brollPlan.folder}`);
-      try {
-        const fetchResult = await fetchPexelsBroll({
-          query: brollPlan.query,
-          count: brollPlan.count,
-          outDir: brollPlan.folder,
-          apiKey
-        });
-        if (fetchResult.errors.length > 0) {
-          console.warn(
-            `[broll][warning] pexels fetch reported ${fetchResult.errors.length} error(s); using whatever clips are present.`
-          );
-        }
-      } catch (error) {
-        console.warn(`[broll][warning] pexels fetch failed (${error.message}); using cached clips or a solid background.`);
-      }
-    } else {
-      console.warn(
-        `[broll][warning] broll_source="pexels" but PEXELS_API_KEY is not set; using cached clips or a solid background.`
-      );
-    }
+  const publicBrollPaths = [];
+  const mediaSearch = await acquireBlockBrollAssets({
+    blocks: narrationBlocks,
+    mediaDir,
+    source: brollPlan.source,
+    pexelsApiKey: process.env.PEXELS_API_KEY,
+    pixabayApiKey: process.env.PIXABAY_API_KEY
+  });
+
+  for (const warning of mediaSearch.warnings) {
+    console.warn(`[broll][warning] ${warning}`);
   }
 
-  if (brollPlan.folder) {
+  const mediaAssets = mediaSearch.assets.map((asset) => {
+    const ext = extname(asset.local_path) || ".mp4";
+    const publicBrollDir = resolve(remotionDir, "public/broll");
+    mkdirSync(publicBrollDir, { recursive: true });
+    const publicBrollPath = resolve(publicBrollDir, `${jobId}-${asset.block_id}${ext}`);
+    copyFileSync(asset.local_path, publicBrollPath);
+    publicBrollPaths.push(publicBrollPath);
+
+    return {
+      ...asset,
+      public_src: `broll/${jobId}-${asset.block_id}${ext}`
+    };
+  });
+
+  if (mediaAssets.length > 0) {
+    scenePlan = scenesFromBlockTimeline(blockTimeline, {
+      title: job.title || "",
+      footer: job.publish?.description || "",
+      mediaAssets
+    });
+    console.log(`\n[broll] licensed block media: ${mediaAssets.length}/${narrationBlocks.length}`);
+  } else if (brollPlan.source === "local" && brollPlan.folder) {
     if (existsSync(brollPlan.folder)) {
       const pick = pickBrollClip(brollPlan.folder);
       if (pick) {
         const ext = extname(pick.path) || ".mp4";
         const publicBrollDir = resolve(remotionDir, "public/broll");
         mkdirSync(publicBrollDir, { recursive: true });
-        publicBrollPath = resolve(publicBrollDir, `${jobId}${ext}`);
+        const publicBrollPath = resolve(publicBrollDir, `${jobId}${ext}`);
         copyFileSync(pick.path, publicBrollPath);
+        publicBrollPaths.push(publicBrollPath);
         brollSrc = `broll/${jobId}${ext}`;
         brollDurationSeconds = probeDurationSeconds(pick.path);
         console.log(`\n[broll] background: ${basename(pick.path)} (${pick.w}x${pick.h}) -> public/${brollSrc}`);
@@ -941,7 +1394,11 @@ async function main() {
   }
 
   // 4. Remotion render (multi-scene visual layer, silent; audio muxed after).
-  const brollStatus = brollSrc ? "external_clip" : "abstract_fallback";
+  const brollStatus = mediaSearch.status === "licensed_broll" || mediaSearch.status === "partial_broll"
+    ? mediaSearch.status
+    : brollSrc
+      ? "external_clip"
+      : "abstract_fallback";
   const props = {
     hook,
     title: job.title || "",
@@ -961,9 +1418,11 @@ async function main() {
       { cwd: remotionDir }
     );
   } finally {
-    // The b-roll copy is only needed during the Remotion render.
-    if (publicBrollPath && existsSync(publicBrollPath)) {
-      rmSync(publicBrollPath, { force: true });
+    // The b-roll copies are only needed during the Remotion render.
+    for (const publicBrollPath of publicBrollPaths) {
+      if (existsSync(publicBrollPath)) {
+        rmSync(publicBrollPath, { force: true });
+      }
     }
   }
 
@@ -1056,6 +1515,24 @@ async function main() {
   const visualStatus = visualPlan.layerCount > 0 ? "visible_layers" : "empty";
   const audioExpected = Boolean(script.trim());
   const sceneCount = scenePlan.length;
+  const blocksCount = narrationBlocks.length;
+  const audioBlocksCount = audioBlocks.length;
+  const captionTimingMatchesBlocks =
+    allCues.length === blockTimeline.length &&
+    allCues.every(
+      (cue, index) =>
+        cue.block_id === blockTimeline[index].block_id &&
+        cue.fromSec === blockTimeline[index].start_sec &&
+        cue.toSec === blockTimeline[index].end_sec
+    );
+  const syncStatus =
+    audioOrigin === "gemini" && audioBlocksCount === blocksCount && captionTimingMatchesBlocks
+      ? "pass"
+      : audioOrigin === "tts_failed"
+        ? "failed"
+        : captionTimingMatchesBlocks
+          ? "estimated"
+          : "failed";
 
   let renderQuality = "pass";
   const qualityReasons = [];
@@ -1075,6 +1552,10 @@ async function main() {
     renderQuality = "fail";
     qualityReasons.push(ttsError || "Gemini TTS failed");
   }
+  if (ttsProvider === "gemini" && audioOrigin === "gemini" && syncStatus !== "pass") {
+    renderQuality = "fail";
+    qualityReasons.push("Gemini TTS succeeded but captions are not timed from per-block audio durations");
+  }
   if (renderQuality !== "fail" && audioExpected && audioStatus === "no_audio_url") {
     renderQuality = renderQuality === "pass" ? "warn" : renderQuality;
     qualityReasons.push("narration expected but no external audio URL was supplied");
@@ -1083,12 +1564,23 @@ async function main() {
     renderQuality = renderQuality === "pass" ? "warn" : renderQuality;
     qualityReasons.push("no real b-roll; used an abstract motion background");
   }
+  if (renderQuality !== "fail" && brollStatus === "partial_broll") {
+    renderQuality = renderQuality === "pass" ? "warn" : renderQuality;
+    qualityReasons.push("only some narration blocks have licensed b-roll");
+  }
+  if (renderQuality !== "fail" && syncStatus !== "pass") {
+    renderQuality = renderQuality === "pass" ? "warn" : renderQuality;
+    qualityReasons.push("caption sync is not verified from per-block Gemini audio durations");
+  }
 
   // Publish-ready only when the render is clean AND has real audio AND real b-roll.
   const publishReady =
     renderQuality === "pass" &&
     (audioStatus === "generated_by_gemini" || audioStatus === "external_audio") &&
-    brollStatus === "external_clip";
+    brollStatus === "licensed_broll" &&
+    mediaAssets.length === blocksCount &&
+    syncStatus === "pass" &&
+    mediaAssets.every((asset) => asset.source_url && asset.license_type);
 
   const diagnostics = {
     job_id: jobId,
@@ -1099,7 +1591,12 @@ async function main() {
     audio_status: audioStatus,
     audio_path: audioPath,
     audio_stream_present: hasAudioTrack,
+    tts_mode: ttsMode,
+    blocks_count: blocksCount,
+    audio_blocks_count: audioBlocksCount,
+    sync_status: syncStatus,
     broll_status: brollStatus,
+    media_assets_count: mediaAssets.length,
     captions_count: allCues.length,
     scenes_count: sceneCount,
     audio_rms_db: audioRmsDb,
@@ -1112,6 +1609,13 @@ async function main() {
       layers: visualPlan.layers,
       scene_count: sceneCount,
       caption_cue_count: allCues.length,
+      block_timeline: blockTimeline.map((block) => ({
+        block_id: block.block_id,
+        start_sec: block.start_sec,
+        end_sec: block.end_sec,
+        caption: block.caption,
+        timing_source: block.timing_source
+      })),
       warnings: visualPlan.warnings
     },
     audio: {
@@ -1124,7 +1628,8 @@ async function main() {
     },
     broll: {
       status: brollStatus,
-      source: brollSrc ? "local_or_pexels_clip" : "abstract_motion_background"
+      source: mediaAssets.length > 0 ? "licensed_block_media" : brollSrc ? "local_clip" : "abstract_motion_background",
+      assets: mediaAssets
     },
     duration: {
       requested_seconds: requestedDuration,
