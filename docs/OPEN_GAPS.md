@@ -27,6 +27,7 @@ inside the next phase · **Low** = polish / hardening backlog.
 | GAP-10 | High | n8n workflow exports include credential references | Fixed |
 | GAP-11 | High | Remotion direct render can output black/empty visual frames while reporting rendered | In progress |
 | GAP-12 | High | External/Gemini TTS audio URL consumption is unverified or broken | In progress |
+| GAP-13 | High | n8n Render Batch does not join RENDER_PAYLOAD to `video_id` | Open |
 
 ---
 
@@ -216,6 +217,11 @@ inside the next phase · **Low** = polish / hardening backlog.
 - **Current closure note:** In progress. The render driver now refuses fully empty
   visual plans, passes scene-card/footer props into Remotion, and writes visual
   diagnostics for the orchestrator manifest.
+- **Update (2026-06-21, render-quality round):** the duplicate "scene cards" layer
+  was removed — it re-printed the hook/captions as stacked cards on top of the live
+  caption, which read as repeated, unformatted text. The MVP layout is now title
+  (top) + hook (center) + ONE time-based caption (bottom) + footer. A render-quality
+  gate records `visual_status` in `output-manifest.json` and hard-fails an empty plan.
 
 ## GAP-12 (High) — External/Gemini TTS audio URL consumption is unverified or broken
 
@@ -240,6 +246,41 @@ inside the next phase · **Low** = polish / hardening backlog.
 - **Current closure note:** In progress. n8n intake maps external audio URLs into
   RAIZ jobs, render-plan masks URLs, local render attaches verified external
   audio when possible, and otherwise produces an explicitly silent render.
+- **Update (2026-06-21, render-quality round):** the render no longer ships
+  Remotion's default silent AAC track as a success. When no verified external
+  audio exists it strips the audio track entirely (`audio_status=no_external_audio`).
+  A silent track is now detected via ffmpeg `volumedetect` (`silent_audio_detected`,
+  `audio_rms_db`); an external-but-silent track fails the quality gate; and
+  `output-manifest.json` carries `render_quality` + `audio_status`.
+
+---
+
+## GAP-13 (High) — n8n Render Batch does not join RENDER_PAYLOAD to video_id
+
+- **Where:** [workflows/n8n/nabil8855-workflows/Zd8S487NWzzwx7V9-RAIZ_Render_Batch_v2.json](../workflows/n8n/nabil8855-workflows/Zd8S487NWzzwx7V9-RAIZ_Render_Batch_v2.json).
+  The mapping node emits `{ video_id: item.json.video_id, ...,
+  expected_payload_source: "CONTENT_ASSETS asset_type=RENDER_PAYLOAD" }` but never
+  actually fetches or joins the `RENDER_PAYLOAD` row for that `video_id`, and there
+  is no guard against `video_id` being undefined.
+- **Why it is undocumented:** the register tracks the render layer (GAP-11/GAP-12)
+  and credential leakage in exports (GAP-10), but none records that the Render Batch
+  workflow lacks a `RENDER_PAYLOAD`↔`video_id` join or a `video_id` guard. The
+  workflow note ("Actual render API is intentionally not connected yet") hides the
+  mapping gap behind "not connected".
+- **Impact:** once the render call is enabled, Render Batch can submit a missing or
+  mismatched payload — `video_id` undefined, an `asset_id` containing "undefined",
+  or a `RENDER_PAYLOAD` belonging to a different `video_id` — or proceed with a
+  random fallback. A `SCRIPT_READY` video with no matching `RENDER_PAYLOAD` should
+  halt with a clear error, not render the wrong thing.
+- **Suggested fix:** in Render Batch, join `CONTENT_ASSETS asset_type=RENDER_PAYLOAD`
+  to each candidate by exact `video_id`; if none matches, stop that item with an
+  explicit error (no random fallback); reject `video_id` undefined and any
+  `asset_id` containing "undefined" before calling
+  `/integrations/n8n/render/remotion-direct`. The orchestrator side already guards
+  (`mapN8nRenderPayloadToRaizJob` requires a valid `video_id`, covered by
+  `apps/orchestrator/src/n8nRenderIntake.test.ts`); the remaining gap is the
+  workflow-side join and guards.
+- **Status:** Open.
 
 ---
 
@@ -262,4 +303,6 @@ These are real, but already recorded in
 2. GAP-09 (production Gemini native-audio voice layer) — the real fix behind
    GAP-04 and GAP-08; sequence it with the "production voice layer" step in
    PROJECT_STATE.
-3. GAP-05 through GAP-08 (hardening backlog).
+3. GAP-13 (n8n Render Batch payload↔video_id join + guards) before enabling the
+   Render Batch → render endpoint.
+4. GAP-05 through GAP-08 (hardening backlog).

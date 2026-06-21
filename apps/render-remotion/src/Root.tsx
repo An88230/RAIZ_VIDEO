@@ -23,8 +23,9 @@ export const RaizRoot: React.FC = () => {
           hook: "إنت مش تعبان… إنت مُفرطن.",
           title: "",
           captions: [],
-          sceneCards: [],
+          scenes: [],
           footer: "",
+          brollStatus: "abstract_fallback",
           durationInSeconds: DEFAULT_DURATION_SECONDS,
           brollSrc: "",
           brollDurationInSeconds: 0

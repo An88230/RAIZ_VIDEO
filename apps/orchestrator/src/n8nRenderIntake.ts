@@ -255,22 +255,22 @@ function optionalBoolean(source: Record<string, unknown>, key: string): boolean 
 }
 
 function buildScript(source: Record<string, unknown>): string {
-  const parts: string[] = [];
+  // Merge narration + on-screen text, but dedupe at the LINE level. The bug was
+  // that a multi-line `voiceover` string and identical `captions`/`scenes` lines
+  // never compared equal as whole strings, so the same words rendered twice
+  // (the script ended up holding the full message two or three times over).
+  const lines: string[] = [];
+
   const voiceover = optionalString(source, "voiceover");
 
   if (voiceover) {
-    parts.push(voiceover);
+    lines.push(...voiceover.split(/\r?\n/));
   }
 
-  const captions = textListFromUnknown(source.captions);
+  lines.push(...textListFromUnknown(source.captions));
+  lines.push(...textListFromUnknown(source.scenes));
 
-  if (captions.length > 0) {
-    parts.push(...captions);
-  }
-
-  parts.push(...textListFromUnknown(source.scenes));
-
-  return dedupeStrings(parts).join("\n");
+  return dedupeStrings(lines).join("\n");
 }
 
 function textListFromUnknown(value: unknown): string[] {
@@ -360,6 +360,12 @@ function optionalUrlString(source: Record<string, unknown>, key: string): string
 
   if (!value) {
     return null;
+  }
+
+  // Accept ready local file links (file:relative / file:///absolute) in addition
+  // to http(s). The render layer validates and attaches the file before muxing.
+  if (value.startsWith("file:")) {
+    return value;
   }
 
   return isHttpUrl(value) ? value : null;

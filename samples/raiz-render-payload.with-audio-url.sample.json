@@ -1,0 +1,37 @@
+{
+  "video_id": "RAIZ-SAMPLE-AUDIO-001",
+  "template": "new_era_dark_editorial",
+  "format": "9:16",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "duration": 20,
+  "language": "ar",
+  "rtl": true,
+  "topic": "الانطفاء اللامع",
+  "angle": "إنت مش تعبان… إنت شغال وجزء منك مطفّي",
+  "voiceover": "إنت مش تعبان… إنت شغال وجزء منك مطفّي",
+  "audio_url": "file:samples/assets/raiz-sample-voice.m4a",
+  "captions": [
+    "النجاح الظاهري قد يخفي انطفاءً داخليًا",
+    "الإرهاق ليس دائمًا من كثرة العمل",
+    "أحيانًا من كثرة ما تحمل بصمت",
+    "سمّه بدل ما يبتلعك"
+  ],
+  "scenes": [
+    {
+      "scene_id": "S01",
+      "caption": "النجاح الظاهري قد يخفي انطفاءً داخليًا",
+      "broll_search_terms": ["dark desk phone light", "night office close up"]
+    },
+    {
+      "scene_id": "S02",
+      "caption": "سمّه بدل ما يبتلعك",
+      "broll_search_terms": ["writing notebook at night"]
+    }
+  ],
+  "brand": {
+    "footer": "© 2025 Nabil88 | nabil88.art"
+  },
+  "_note": "audio_url points to a committed macOS `say` Arabic voice fixture (samples/assets/raiz-sample-voice.m4a) for OFFLINE testing only. It is NOT Gemini TTS native audio — the official voice layer is tracked as GAP-09. file: URLs are resolved relative to the repo root and validated as audio before muxing; http(s) audio_url is also supported. With no PEXELS_API_KEY the b-roll falls back to an abstract motion background (broll_status=abstract_fallback), so publish_ready stays false until real b-roll is supplied."
+}

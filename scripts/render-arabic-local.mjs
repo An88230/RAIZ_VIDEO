@@ -22,7 +22,7 @@ import {
   statSync,
   writeFileSync
 } from "node:fs";
-import { basename, dirname, extname, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { fetchPexelsBroll } from "./fetch-pexels-broll.mjs";
@@ -34,6 +34,8 @@ const FPS = 30;
 // underscores (e.g. raiz_dark_hook_01), so map "_" -> "-" to bridge the two.
 const DEFAULT_COMPOSITION_ID = "raiz-dark-hook-01";
 const SAY_VOICE = "Majed";
+// Audio at or below this mean volume (dB) is treated as effectively silent.
+const SILENCE_DB_THRESHOLD = -60;
 const NO_EXTERNAL_AUDIO_SOURCE = "no_external_audio";
 
 function parseArgs(argv) {
@@ -63,6 +65,30 @@ export function resolveVoicePlan(job, options = {}) {
     voiceType === "external_file" && typeof voice.file_path === "string" && voice.file_path.trim()
       ? resolve(root, voice.file_path)
       : null;
+
+  if (externalUrl && externalUrl.startsWith("file:")) {
+    const localAudioPath = fileUrlToLocalPath(externalUrl, root);
+
+    if (localAudioPath && existsSync(localAudioPath)) {
+      return {
+        source: "external_file",
+        externalPath: localAudioPath,
+        externalUrl: null,
+        externalUrlMasked: null,
+        fallbackVoice: null,
+        warnings: []
+      };
+    }
+
+    return {
+      source: NO_EXTERNAL_AUDIO_SOURCE,
+      externalPath: null,
+      externalUrl: null,
+      externalUrlMasked: null,
+      fallbackVoice: SAY_VOICE,
+      warnings: [`Declared file audio_url was not found (${localAudioPath ?? externalUrl}); rendering without narration audio.`]
+    };
+  }
 
   if (externalUrl) {
     return {
@@ -306,11 +332,18 @@ function findExternalAudioUrl(job) {
       continue;
     }
 
+    const value = candidate.trim();
+
+    // Local file links (file:relative or file:///absolute) are valid ready audio.
+    if (value.startsWith("file:")) {
+      return value;
+    }
+
     try {
-      const parsed = new URL(candidate.trim());
+      const parsed = new URL(value);
 
       if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-        return candidate.trim();
+        return value;
       }
     } catch {
       continue;
@@ -320,26 +353,116 @@ function findExternalAudioUrl(job) {
   return null;
 }
 
-function buildVisualPlan({ title, hook, captions, footer }) {
-  const sceneCards = captions
-    .map((cue) => cue.text)
-    .filter((text) => typeof text === "string" && text.trim())
-    .slice(0, 4);
+// Resolve a file: audio URL to a local path. Supports file:relative (resolved
+// against repo root) and file:///absolute. Returns null if not a file URL.
+export function fileUrlToLocalPath(raw, root = repoRoot) {
+  if (typeof raw !== "string" || !raw.startsWith("file:")) {
+    return null;
+  }
+
+  let path = raw.slice("file:".length);
+
+  if (path.startsWith("///")) {
+    path = path.slice(2); // file:///abs -> /abs
+  } else if (path.startsWith("//")) {
+    path = path.slice(2); // file://host-or-abs -> treat remainder as path
+  }
+
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // keep raw path if it is not valid percent-encoding
+  }
+
+  return isAbsolute(path) ? path : resolve(root, path);
+}
+
+export function buildVisualPlan({ title, hook, captions, footer }) {
+  // MVP composition: title (top) + hook (center) + ONE time-based caption
+  // (bottom) + footer. No "scene cards" — dumping every caption at once was the
+  // source of the repeated-text clutter.
+  const captionCount = Array.isArray(captions)
+    ? captions.filter((cue) => cue && typeof cue.text === "string" && cue.text.trim()).length
+    : 0;
   const layers = [
     title?.trim() ? "title" : null,
     hook?.trim() ? "hook" : null,
-    sceneCards.length > 0 ? "caption_scene_cards" : null,
+    captionCount > 0 ? "captions" : null,
     footer?.trim() ? "footer" : null
   ].filter(Boolean);
 
   return {
     layers,
     layerCount: layers.length,
-    hasText: Boolean(title?.trim() || hook?.trim() || sceneCards.length > 0),
-    sceneCards,
+    hasText: Boolean(title?.trim() || hook?.trim() || captionCount > 0),
+    captionCount,
     footer: footer?.trim() || null,
     warnings: layers.length > 0 ? [] : ["No visual text layers were available for render."]
   };
+}
+
+/**
+ * Build a 2–6 scene timeline from the available text. Each content scene shows a
+ * single line as the focal text; the last ~3s is a dedicated final card. This is
+ * what turns the old static title card into a real multi-scene MVP montage.
+ */
+export function buildScenePlan({ title, hook, script, footer, duration }) {
+  const heading = typeof title === "string" ? title.trim() : "";
+  const hookText = typeof hook === "string" ? hook.trim() : "";
+  const sentences = String(script ?? "")
+    .split(/[.!؟…\n]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const ordered = [];
+  if (hookText) {
+    ordered.push(hookText);
+  }
+  for (const sentence of sentences) {
+    // Skip fragments already contained in the hook so the hook scene is not
+    // immediately re-shown in pieces.
+    if (hookText && hookText.includes(sentence)) {
+      continue;
+    }
+    ordered.push(sentence);
+  }
+
+  let lines = [...new Set(ordered)];
+  if (lines.length === 0) {
+    lines = [heading || footer?.trim() || "RAIZ"];
+  }
+
+  const MAX_CONTENT = 5;
+  if (lines.length > MAX_CONTENT) {
+    const head = lines.slice(0, MAX_CONTENT - 1);
+    const tail = lines.slice(MAX_CONTENT - 1).join(" — ");
+    lines = [...head, tail];
+  }
+
+  const totalDuration = Number.isFinite(duration) && duration > 0 ? duration : 10;
+  const finalSeconds = Math.min(3, Math.max(1.5, totalDuration * 0.18));
+  const contentSeconds = Math.max(0.8, totalDuration - finalSeconds);
+  const per = contentSeconds / lines.length;
+
+  const scenes = lines.map((text, index) => ({
+    kind: "content",
+    heading,
+    text,
+    fromSec: Number((index * per).toFixed(3)),
+    toSec: Number(((index + 1) * per).toFixed(3)),
+    bgVariant: index % 5
+  }));
+
+  scenes.push({
+    kind: "final",
+    heading,
+    text: hookText || heading || lines[0],
+    fromSec: Number(contentSeconds.toFixed(3)),
+    toSec: totalDuration,
+    bgVariant: 4
+  });
+
+  return scenes;
 }
 
 function run(label, command, commandArgs, options = {}) {
@@ -356,6 +479,19 @@ function capture(command, commandArgs, options = {}) {
     throw new Error(`${command} ${commandArgs.join(" ")} failed: ${result.stderr || result.stdout}`);
   }
   return result.stdout.trim();
+}
+
+// Mean loudness (dB) via ffmpeg volumedetect. Returns null if unmeasurable.
+// Digital silence reports about -91 dB, so it never passes the silence gate.
+function measureMeanVolumeDb(mediaPath) {
+  const result = spawnSync(
+    "ffmpeg",
+    ["-hide_banner", "-nostats", "-i", mediaPath, "-af", "volumedetect", "-f", "null", "-"],
+    { encoding: "utf8" }
+  );
+  const output = `${result.stderr ?? ""}${result.stdout ?? ""}`;
+  const match = /mean_volume:\s*(-?\d+(?:\.\d+)?) dB/.exec(output);
+  return match ? Number(match[1]) : null;
 }
 
 async function downloadExternalAudio(url, outPath) {
@@ -681,6 +817,13 @@ async function main() {
     captions: allCues,
     footer: job.publish?.description || ""
   });
+  const scenePlan = buildScenePlan({
+    title: job.title || "",
+    hook,
+    script,
+    footer: job.publish?.description || "",
+    duration: durationSeconds
+  });
 
   if (visualPlan.layerCount === 0) {
     throw new Error("Refusing to render a visually empty Remotion output.");
@@ -740,13 +883,15 @@ async function main() {
     }
   }
 
-  // 4. Remotion render (visual layer, silent).
+  // 4. Remotion render (multi-scene visual layer, silent; audio muxed after).
+  const brollStatus = brollSrc ? "external_clip" : "abstract_fallback";
   const props = {
     hook,
     title: job.title || "",
     captions: scriptCues,
-    sceneCards: visualPlan.sceneCards,
+    scenes: scenePlan,
     footer: visualPlan.footer,
+    brollStatus,
     durationInSeconds: durationSeconds,
     ...(brollSrc ? { brollSrc, brollDurationInSeconds: brollDurationSeconds } : {})
   };
@@ -765,7 +910,8 @@ async function main() {
     }
   }
 
-  // 5. Mux audio only when a verified external source exists.
+  // 5. Audio: mux a verified external voice-over, or strip audio entirely.
+  // We never ship Remotion's default silent AAC track and call it a success.
   if (voiceInputPath) {
     run("FFmpeg mux audio", "ffmpeg", [
       "-y",
@@ -789,7 +935,19 @@ async function main() {
       finalVideo
     ]);
   } else {
-    copyFileSync(rawVideo, finalVideo);
+    run("FFmpeg finalize (no external audio; drop silent track)", "ffmpeg", [
+      "-y",
+      "-i",
+      rawVideo,
+      "-map",
+      "0:v:0",
+      "-c:v",
+      "copy",
+      "-an",
+      "-movflags",
+      "+faststart",
+      finalVideo
+    ]);
   }
 
   // 6. Verify.
@@ -821,22 +979,81 @@ async function main() {
     finalVideo
   ]);
   const finalDuration = probeDurationSeconds(finalVideo);
+
+  // Audio quality: detect a silent track so it can never pass as a success.
+  const hasAudioTrack = Boolean(hasAudio);
+  const audioRmsDb = hasAudioTrack ? measureMeanVolumeDb(finalVideo) : null;
+  const silentAudioDetected = hasAudioTrack && audioRmsDb !== null && audioRmsDb <= SILENCE_DB_THRESHOLD;
+
+  let audioStatus;
+  if (audioSummary.external_audio_attached) {
+    audioStatus = silentAudioDetected ? "silent_audio" : "external_audio";
+  } else {
+    audioStatus = "no_audio_url";
+  }
+
+  const visualStatus = visualPlan.layerCount > 0 ? "visible_layers" : "empty";
+  const audioExpected = Boolean(script.trim());
+  const sceneCount = scenePlan.length;
+
+  let renderQuality = "pass";
+  const qualityReasons = [];
+  if (visualStatus === "empty") {
+    renderQuality = "fail";
+    qualityReasons.push("no visual text layers");
+  }
+  if (sceneCount < 2) {
+    renderQuality = "fail";
+    qualityReasons.push("only a single static scene was produced");
+  }
+  if (silentAudioDetected) {
+    renderQuality = "fail";
+    qualityReasons.push("audio track is present but silent");
+  }
+  if (renderQuality !== "fail" && audioExpected && audioStatus === "no_audio_url") {
+    renderQuality = renderQuality === "pass" ? "warn" : renderQuality;
+    qualityReasons.push("narration expected but no external audio URL was supplied");
+  }
+  if (renderQuality !== "fail" && brollStatus === "abstract_fallback") {
+    renderQuality = renderQuality === "pass" ? "warn" : renderQuality;
+    qualityReasons.push("no real b-roll; used an abstract motion background");
+  }
+
+  // Publish-ready only when the render is clean AND has real audio AND real b-roll.
+  const publishReady =
+    renderQuality === "pass" && audioStatus === "external_audio" && brollStatus === "external_clip";
+
   const diagnostics = {
     job_id: jobId,
+    render_quality: renderQuality,
+    quality_reasons: qualityReasons,
+    visual_status: visualStatus,
+    audio_status: audioStatus,
+    broll_status: brollStatus,
+    captions_count: allCues.length,
+    scenes_count: sceneCount,
+    audio_rms_db: audioRmsDb,
+    silent_audio_detected: silentAudioDetected,
+    publish_ready: publishReady,
     visual: {
-      status: visualPlan.layerCount > 0 ? "visible_layers" : "empty",
+      status: visualStatus,
       layer_count: visualPlan.layerCount,
       layers: visualPlan.layers,
-      text_layer_count: visualPlan.layers.filter((layer) => ["title", "hook", "caption_scene_cards", "footer"].includes(layer))
-        .length,
-      scene_card_count: visualPlan.sceneCards.length,
+      scene_count: sceneCount,
       caption_cue_count: allCues.length,
       warnings: visualPlan.warnings
     },
     audio: {
       ...audioSummary,
-      has_audio_track: Boolean(hasAudio),
+      status: audioStatus,
+      has_audio_track: hasAudioTrack,
+      rms_db: audioRmsDb,
+      silent_audio_detected: silentAudioDetected,
       duration_seconds: audioDurationSeconds
+    },
+    broll: {
+      status: brollStatus,
+      source: brollSrc ? "local_or_pexels_clip" : "abstract_motion_background"
     },
     duration: {
       requested_seconds: requestedDuration,
@@ -849,16 +1066,24 @@ async function main() {
   writeFileSync(diagnosticsPath, `${JSON.stringify(diagnostics, null, 2)}\n`, "utf8");
 
   console.log("\n========================================");
-  console.log("✅ RAIZ first Arabic MP4 rendered");
+  console.log(`RAIZ render quality: ${renderQuality.toUpperCase()}`);
   console.log(`   file:       ${finalVideo}`);
   console.log(`   dimensions: ${dimensions} (expected 1080x1920)`);
-  console.log(`   audio:      ${hasAudio || "NONE"}`);
+  console.log(`   audio:      ${audioStatus}${audioRmsDb !== null ? ` (${audioRmsDb} dB)` : ""}`);
+  console.log(`   visual:     ${visualStatus} (${sceneCount} scenes, ${allCues.length} caption cues)`);
+  console.log(`   b-roll:     ${brollStatus}`);
+  console.log(`   publish_ready: ${publishReady}`);
   console.log(`   duration:   ${finalDuration.toFixed(3)}s`);
-  console.log(`   captions:   ${srtPath}`);
+  if (qualityReasons.length > 0) {
+    console.log(`   notes:      ${qualityReasons.join("; ")}`);
+  }
   console.log("========================================");
 
   if (dimensions !== "1080x1920") {
     throw new Error(`Expected 1080x1920 output, got ${dimensions}.`);
+  }
+  if (renderQuality === "fail") {
+    throw new Error(`Render quality gate failed: ${qualityReasons.join("; ")}.`);
   }
 }
 

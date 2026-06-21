@@ -40,7 +40,21 @@ export interface RemotionRenderResult {
   captionsAssPath?: string;
   audio?: RemotionRenderAudioSummary;
   visual?: RemotionRenderVisualSummary;
+  quality?: RemotionRenderQualitySummary;
   message?: string;
+}
+
+export interface RemotionRenderQualitySummary {
+  render_quality: "pass" | "warn" | "fail";
+  visual_status?: string;
+  audio_status?: string;
+  broll_status?: string;
+  captions_count?: number;
+  scenes_count?: number | null;
+  audio_rms_db?: number | null;
+  silent_audio_detected?: boolean;
+  publish_ready?: boolean;
+  reasons?: string[];
 }
 
 export interface RemotionRenderAudioSummary {
@@ -113,11 +127,12 @@ export function createScriptRemotionRenderer(): RemotionRenderer {
         ok,
         outputPath,
         rawVideoPath: resolve(input.outputDir, "raw.mp4"),
-        voicePath: diagnostics.audio?.status === "attached" ? resolve(input.outputDir, "voice.aiff") : undefined,
+        voicePath: diagnostics.audio?.external_audio_attached ? resolve(input.outputDir, "voice.aiff") : undefined,
         captionsSrtPath: resolve(input.outputDir, "captions.srt"),
         captionsAssPath: resolve(input.outputDir, "captions.ass"),
         audio: diagnostics.audio,
         visual: diagnostics.visual,
+        quality: diagnostics.quality,
         message: buildRenderDriverMessage(ok, renderResult, timeoutMs)
       };
     }
@@ -209,6 +224,8 @@ export async function renderJobWithRemotionDirect(
 
   const completedAt = new Date().toISOString();
   const manifestPath = paths.remotionRenderManifestPath;
+  const scenesCount = await readScenesCount(paths.n8nRenderPayloadPath);
+  const quality = resolveQualitySummary(result, scenesCount);
   const manifest = {
     job_id: jobId,
     engine: "remotion_direct",
@@ -222,6 +239,7 @@ export async function renderJobWithRemotionDirect(
     },
     visual: result.visual ?? buildFallbackVisualSummary(job),
     audio: result.audio ?? buildFallbackAudioSummary(job),
+    quality,
     duration_seconds: result.durationSeconds ?? null,
     created_at: completedAt
   };
@@ -234,6 +252,10 @@ export async function renderJobWithRemotionDirect(
       message: "Remotion-direct output file exists."
     }
   ];
+  const qualityWarnings =
+    quality.render_quality === "warn"
+      ? [`render_quality=warn: ${(quality.reasons ?? []).join("; ") || "see render diagnostics"}`]
+      : [];
   const outputManifest: ShortVideoMakerOutputManifest = {
     job_id: jobId,
     adapter: "remotion_direct",
@@ -242,11 +264,30 @@ export async function renderJobWithRemotionDirect(
     output_path: result.outputPath,
     final_video_path: result.outputPath,
     checks: outputManifestChecks,
-    warnings: [],
+    warnings: qualityWarnings,
     errors: [],
     created_at: completedAt
   };
-  await writeFile(paths.outputManifestPath, `${JSON.stringify(outputManifest, null, 2)}\n`);
+  await writeFile(
+    paths.outputManifestPath,
+    `${JSON.stringify(
+      {
+        ...outputManifest,
+        render_quality: quality.render_quality,
+        visual_status: quality.visual_status ?? null,
+        audio_status: quality.audio_status ?? null,
+        broll_status: quality.broll_status ?? null,
+        captions_count: quality.captions_count ?? null,
+        scenes_count: quality.scenes_count ?? null,
+        audio_rms_db: quality.audio_rms_db ?? null,
+        silent_audio_detected: quality.silent_audio_detected ?? false,
+        publish_ready: quality.publish_ready ?? false,
+        quality
+      },
+      null,
+      2
+    )}\n`
+  );
 
   const finalStatus = await updateJobStatus(jobId, "rendered", {
     storageRoot: options.storageRoot,
@@ -278,21 +319,86 @@ export async function renderJobWithRemotionDirect(
 async function readRenderDiagnostics(path: string): Promise<{
   audio?: RemotionRenderAudioSummary;
   visual?: RemotionRenderVisualSummary;
+  quality?: RemotionRenderQualitySummary;
 }> {
   try {
     const raw = await readFile(path, "utf8");
     const parsed = JSON.parse(raw) as {
       audio?: RemotionRenderAudioSummary;
       visual?: RemotionRenderVisualSummary;
+      render_quality?: "pass" | "warn" | "fail";
+      visual_status?: string;
+      audio_status?: string;
+      broll_status?: string;
+      captions_count?: number;
+      scenes_count?: number | null;
+      audio_rms_db?: number | null;
+      silent_audio_detected?: boolean;
+      publish_ready?: boolean;
+      quality_reasons?: string[];
     };
+
+    const quality: RemotionRenderQualitySummary | undefined = parsed.render_quality
+      ? {
+          render_quality: parsed.render_quality,
+          visual_status: parsed.visual_status,
+          audio_status: parsed.audio_status,
+          broll_status: parsed.broll_status,
+          captions_count: parsed.captions_count,
+          scenes_count: parsed.scenes_count ?? null,
+          audio_rms_db: parsed.audio_rms_db ?? null,
+          silent_audio_detected: parsed.silent_audio_detected,
+          publish_ready: parsed.publish_ready ?? false,
+          reasons: parsed.quality_reasons
+        }
+      : undefined;
 
     return {
       audio: parsed.audio,
-      visual: parsed.visual
+      visual: parsed.visual,
+      quality
     };
   } catch {
     return {};
   }
+}
+
+async function readScenesCount(payloadPath: string): Promise<number | null> {
+  try {
+    const raw = await readFile(payloadPath, "utf8");
+    const parsed = JSON.parse(raw) as { scenes?: unknown };
+    return Array.isArray(parsed.scenes) ? parsed.scenes.length : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveQualitySummary(
+  result: RemotionRenderResult,
+  scenesCount: number | null
+): RemotionRenderQualitySummary {
+  if (result.quality) {
+    return {
+      ...result.quality,
+      // Prefer the actually-rendered scene count over the payload's declared scenes.
+      scenes_count: result.quality.scenes_count ?? scenesCount ?? null
+    };
+  }
+
+  // Fallback when render diagnostics are unavailable (e.g. an injected fake
+  // renderer in tests). Stay conservative rather than claiming a verified pass.
+  return {
+    render_quality: "pass",
+    visual_status: result.visual?.status ?? "unknown",
+    audio_status: result.audio?.status ?? "unknown",
+    broll_status: "unknown",
+    captions_count: result.visual?.caption_cue_count,
+    scenes_count: scenesCount,
+    audio_rms_db: null,
+    silent_audio_detected: false,
+    publish_ready: false,
+    reasons: []
+  };
 }
 
 function buildFallbackVisualSummary(job: { title?: string; hook?: string; script?: string }): RemotionRenderVisualSummary {
