@@ -91,6 +91,36 @@ const fakeRemotionRenderer: RemotionRenderer = {
     };
   }
 };
+const n8nRenderPayload = {
+  video_id: "RVF-2026-N8N-001",
+  template: "new_era_dark_editorial",
+  format: "9:16",
+  width: 1080,
+  height: 1920,
+  fps: 30,
+  duration: 45,
+  language: "ar",
+  rtl: true,
+  topic: "الانطفاء اللامع",
+  angle: "إنت مش تعبان... إنت شغال وجزء منك مطفّي.",
+  voiceover: "في لحظة ما، لا ينطفئ الإنسان بالكامل. فقط يفقد اللمعة التي كانت تشرح حضوره.",
+  captions: ["الانطفاء اللامع", "أن تبقى واضحًا من الخارج، ومتعبًا من الداخل."],
+  scenes: [
+    {
+      scene_id: "S01",
+      caption: "مكتب مظلم وشاشة هاتف",
+      broll_search_terms: ["dark desk phone light", "night office close up"]
+    },
+    {
+      scene_id: "S02",
+      caption: "شخص يكتب في مفكرة",
+      broll_search_terms: ["writing notebook at night", "dark desk phone light"]
+    }
+  ],
+  brand: {
+    footer: "© 2025 Nabil88 | nabil88.art"
+  }
+};
 const server = createServer({
   storageRoot,
   shortVideoMakerVendorPath,
@@ -282,6 +312,7 @@ interface ArtifactInventoryBody {
     total_artifacts?: number;
     has_job?: boolean;
     has_status?: boolean;
+    has_n8n_render_payload?: boolean;
     has_render_plan?: boolean;
     has_remotion_render_manifest?: boolean;
     has_preflight_report?: boolean;
@@ -3965,6 +3996,154 @@ if (
   )
 ) {
   throw new Error("Expected artifacts endpoint to detect remotion output and render manifests.");
+}
+
+const blockedN8nJobId = "RVF-2026-N8N-BLOCKED-001";
+const blockedN8nResponse = await server.inject({
+  method: "POST",
+  url: "/integrations/n8n/render/remotion-direct",
+  payload: {
+    ...n8nRenderPayload,
+    video_id: blockedN8nJobId
+  }
+});
+
+if (blockedN8nResponse.statusCode !== 403) {
+  throw new Error(`Expected n8n Remotion intake to be blocked by default, got ${blockedN8nResponse.statusCode}.`);
+}
+
+if (existsSync(resolve(storageRoot, "jobs", blockedN8nJobId))) {
+  throw new Error("Expected blocked n8n Remotion intake not to create a job folder.");
+}
+
+process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+const invalidN8nResponse = await server.inject({
+  method: "POST",
+  url: "/integrations/n8n/render/remotion-direct",
+  payload: {
+    ...n8nRenderPayload,
+    video_id: "",
+    voiceover: "",
+    captions: []
+  }
+});
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
+
+if (invalidN8nResponse.statusCode !== 400) {
+  throw new Error(`Expected invalid n8n Remotion payload to return 400, got ${invalidN8nResponse.statusCode}.`);
+}
+
+process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+const n8nRenderResponse = await server.inject({
+  method: "POST",
+  url: "/integrations/n8n/render/remotion-direct",
+  payload: n8nRenderPayload
+});
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
+
+if (n8nRenderResponse.statusCode !== 200) {
+  throw new Error(`Expected n8n Remotion intake to render with enabled guard, got ${n8nRenderResponse.statusCode}.`);
+}
+
+const n8nRenderBody = JSON.parse(n8nRenderResponse.body) as {
+  status?: string;
+  output_path?: string | null;
+  n8n_render_payload_path?: string;
+  metadata?: {
+    preflight_status?: string;
+    render_manifest_path?: string;
+    output_manifest_path?: string;
+  };
+};
+const n8nJobId = n8nRenderPayload.video_id;
+const n8nJobDir = resolve(storageRoot, "jobs", n8nJobId);
+const n8nOutputPath = resolve(n8nJobDir, "output", `${n8nJobId}.mp4`);
+
+if (
+  n8nRenderBody.status !== "rendered" ||
+  n8nRenderBody.output_path !== n8nOutputPath ||
+  n8nRenderBody.n8n_render_payload_path !== resolve(n8nJobDir, "n8n-render-payload.json") ||
+  n8nRenderBody.metadata?.preflight_status !== "passed" ||
+  !existsSync(n8nOutputPath)
+) {
+  throw new Error("Expected n8n Remotion intake to create a rendered job with MP4 output.");
+}
+
+for (const requiredArtifact of [
+  "job.json",
+  "n8n-render-payload.json",
+  "render-plan.json",
+  "preflight-report.json",
+  "output-manifest.json",
+  "render-manifest.remotion-direct.json"
+]) {
+  if (!existsSync(resolve(n8nJobDir, requiredArtifact))) {
+    throw new Error(`Expected n8n Remotion intake to create ${requiredArtifact}.`);
+  }
+}
+
+const n8nStoredJob = JSON.parse(readFileSync(resolve(n8nJobDir, "job.json"), "utf8")) as {
+  title?: string;
+  script?: string;
+  template?: {
+    engine?: string;
+    template_id?: string;
+    style_preset?: string;
+  };
+  assets?: {
+    broll_source?: string;
+    search_terms?: string[];
+    broll_count?: number;
+  };
+};
+
+if (
+  n8nStoredJob.title !== n8nRenderPayload.topic ||
+  !n8nStoredJob.script?.includes("لا ينطفئ الإنسان") ||
+  n8nStoredJob.template?.engine !== "remotion_direct" ||
+  n8nStoredJob.template?.template_id !== "raiz_dark_hook_01" ||
+  n8nStoredJob.template?.style_preset !== "new_era_dark_editorial" ||
+  n8nStoredJob.assets?.broll_source !== "pexels" ||
+  n8nStoredJob.assets?.broll_count !== 3 ||
+  n8nStoredJob.assets?.search_terms?.join("|") !==
+    "dark desk phone light|night office close up|writing notebook at night"
+) {
+  throw new Error("Expected n8n Remotion intake to map payload into a deterministic RAIZ job.");
+}
+
+const n8nArtifactsResponse = await server.inject({
+  method: "GET",
+  url: `/jobs/${n8nJobId}/artifacts`
+});
+const n8nArtifacts = JSON.parse(n8nArtifactsResponse.body) as ArtifactInventoryBody;
+
+if (
+  n8nArtifacts.summary?.has_n8n_render_payload !== true ||
+  n8nArtifacts.summary.has_render_plan !== true ||
+  n8nArtifacts.summary.has_preflight_report !== true ||
+  n8nArtifacts.summary.has_output_manifest !== true ||
+  n8nArtifacts.summary.has_remotion_render_manifest !== true ||
+  n8nArtifacts.summary.has_output !== true ||
+  !n8nArtifacts.artifacts?.some(
+    (artifact) => artifact.name === "n8n-render-payload.json" && artifact.type === "n8n_render_payload" && artifact.exists
+  ) ||
+  !n8nArtifacts.artifacts.some(
+    (artifact) => artifact.name === `output/${n8nJobId}.mp4` && artifact.type === "output_file" && artifact.exists
+  )
+) {
+  throw new Error("Expected artifacts endpoint to detect n8n intake payload and rendered MP4 output.");
+}
+
+process.env.RAIZ_ENABLE_REAL_RENDER = "true";
+const duplicateN8nResponse = await server.inject({
+  method: "POST",
+  url: "/integrations/n8n/render/remotion-direct",
+  payload: n8nRenderPayload
+});
+delete process.env.RAIZ_ENABLE_REAL_RENDER;
+
+if (duplicateN8nResponse.statusCode !== 409) {
+  throw new Error(`Expected duplicate n8n Remotion job to return 409, got ${duplicateN8nResponse.statusCode}.`);
 }
 
 const queuedRenderJob = {

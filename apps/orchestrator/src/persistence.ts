@@ -48,6 +48,7 @@ export interface JobPaths {
   jobPath: string;
   statusPath: string;
   eventsPath: string;
+  n8nRenderPayloadPath: string;
   renderPlanPath: string;
   remotionRenderManifestPath: string;
   outputDir: string;
@@ -402,6 +403,7 @@ export function getJobPaths(jobId: string, options: PersistenceOptions = {}): Jo
     jobPath: resolve(jobDir, "job.json"),
     statusPath: resolve(jobDir, "status.json"),
     eventsPath: resolve(jobDir, "events.ndjson"),
+    n8nRenderPayloadPath: resolve(jobDir, "n8n-render-payload.json"),
     renderPlanPath: resolve(jobDir, "render-plan.json"),
     remotionRenderManifestPath: resolve(jobDir, "render-manifest.remotion-direct.json"),
     outputDir: resolve(jobDir, "output"),

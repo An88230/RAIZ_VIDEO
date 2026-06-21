@@ -602,6 +602,7 @@ The response reports known artifacts when present:
 job.json
 status.json
 events.ndjson
+n8n-render-payload.json
 render-plan.json
 preflight-report.json
 adapter-health.short-video-maker.json

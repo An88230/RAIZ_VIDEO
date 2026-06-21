@@ -50,6 +50,11 @@ import {
   JobYouTubeUploadPlanStateError
 } from "./youtubeUploadPlan.js";
 import { JobMockRenderPreflightError, JobMockRenderStateError, runMockRender } from "./mockRender.js";
+import {
+  N8nRenderPayloadValidationError,
+  N8nRenderPreflightError,
+  renderN8nPayloadWithRemotionDirect
+} from "./n8nRenderIntake.js";
 import { JobPreflightStateError, runPreflight } from "./preflight.js";
 import {
   JobRealHttpSenderReadinessStateError,
@@ -441,6 +446,53 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
         return reply.code(500).send({
           status: "render_failed",
           job_id: request.params.id,
+          error: error.message
+        });
+      }
+
+      throw error;
+    }
+  });
+
+  server.post<{ Body: unknown }>("/integrations/n8n/render/remotion-direct", async (request, reply) => {
+    try {
+      return await renderN8nPayloadWithRemotionDirect(
+        request.body,
+        options.remotionRenderer ?? defaultRemotionRenderer,
+        { storageRoot: options.storageRoot }
+      );
+    } catch (error) {
+      if (error instanceof RealRenderExecutionDisabledError) {
+        return reply.code(403).send({
+          status: "blocked",
+          guard: error.guard
+        });
+      }
+
+      if (error instanceof N8nRenderPayloadValidationError) {
+        return reply.code(400).send({
+          status: "rejected",
+          errors: error.issues
+        });
+      }
+
+      if (error instanceof JobConflictError) {
+        return reply.code(409).send({
+          status: "conflict",
+          error: error.message
+        });
+      }
+
+      if (error instanceof N8nRenderPreflightError) {
+        return reply.code(409).send({
+          status: "conflict",
+          error: error.message
+        });
+      }
+
+      if (error instanceof JobRemotionDirectRenderError) {
+        return reply.code(500).send({
+          status: "render_failed",
           error: error.message
         });
       }

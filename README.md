@@ -32,6 +32,8 @@ Current local-first scope:
   `/jobs/render` queueing.
 - Run real Remotion-direct rendering only through the guarded
   `/jobs/:id/render/remotion-direct` route.
+- Accept sanitized n8n render payloads through a guarded local Remotion-direct
+  intake route.
 - Warn when schema-supported local render fields are reserved or not implemented
   in local render v1.
 
@@ -264,6 +266,7 @@ Current endpoints:
 - `POST /jobs/:id/preflight`
 - `POST /jobs/:id/mock-render`
 - `POST /jobs/:id/render/remotion-direct`
+- `POST /integrations/n8n/render/remotion-direct`
 - `POST /jobs/:id/adapter-health`
 - `POST /jobs/:id/adapter-payload/short-video-maker`
 - `POST /jobs/:id/upstream-request/short-video-maker`
@@ -309,6 +312,8 @@ Preflight also checks declared local voice and asset paths. Missing local voice 
 `POST /jobs/:id/mock-render` requires `preflight_status: passed`, moves the job through `rendering -> rendered`, and writes a text artifact at `storage/jobs/{job_id}/output/{job_id}.mock-render.txt`. It does not call a render engine and does not generate video.
 
 `POST /jobs/:id/render/remotion-direct` is the **guarded real render** for the v1 Arabic engine. It requires `RAIZ_ENABLE_REAL_RENDER=true`, `status: preparing`, and `preflight_status: passed`. It runs the Remotion-direct pipeline ([scripts/render-arabic-local.mjs](scripts/render-arabic-local.mjs)) against the stored job, writes the MP4 to `storage/jobs/{job_id}/output/{filename}` plus `render-manifest.remotion-direct.json`, and moves the job `preparing -> rendering -> rendered` (or `failed`). It does not publish, upload, touch `vendor/`, or start Docker. Tests inject a fake renderer; real Remotion/FFmpeg runs only when the route is called with the guard enabled.
+
+`POST /integrations/n8n/render/remotion-direct` accepts the sanitized n8n `RENDER_PAYLOAD` shape, maps it into a validated `remotion_direct` RAIZ Job, writes `n8n-render-payload.json`, prepares, preflights, and runs the guarded Remotion-direct render. It requires `RAIZ_ENABLE_REAL_RENDER=true`; when the guard is disabled it returns `403` before creating any job storage. It does not execute n8n, publish, upload, touch `vendor/`, or start Docker.
 
 `GET /health` returns a lightweight liveness response for the orchestrator itself, including the current real render flag. It does not touch storage, start processes, or call the network.
 

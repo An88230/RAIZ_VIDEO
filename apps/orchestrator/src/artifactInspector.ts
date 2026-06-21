@@ -7,6 +7,7 @@ export type JobArtifactType =
   | "job_payload"
   | "job_status"
   | "event_log"
+  | "n8n_render_payload"
   | "render_plan"
   | "remotion_render_manifest"
   | "preflight_report"
@@ -48,6 +49,7 @@ export interface JobArtifactsInventory {
     total_artifacts: number;
     has_job: boolean;
     has_status: boolean;
+    has_n8n_render_payload: boolean;
     has_render_plan: boolean;
     has_remotion_render_manifest: boolean;
     has_preflight_report: boolean;
@@ -88,6 +90,7 @@ export async function inspectJobArtifacts(
     inspectArtifact("job.json", "job_payload", paths.jobPath),
     inspectArtifact("status.json", "job_status", paths.statusPath),
     inspectArtifact("events.ndjson", "event_log", paths.eventsPath),
+    inspectArtifact("n8n-render-payload.json", "n8n_render_payload", paths.n8nRenderPayloadPath),
     inspectArtifact("render-plan.json", "render_plan", paths.renderPlanPath),
     inspectArtifact("render-manifest.remotion-direct.json", "remotion_render_manifest", paths.remotionRenderManifestPath),
     inspectArtifact("preflight-report.json", "preflight_report", paths.preflightReportPath),
@@ -138,6 +141,7 @@ export async function inspectJobArtifacts(
       total_artifacts: artifacts.filter((artifact) => artifact.exists).length,
       has_job: artifactExists(artifacts, "job.json"),
       has_status: artifactExists(artifacts, "status.json"),
+      has_n8n_render_payload: artifactExists(artifacts, "n8n-render-payload.json"),
       has_render_plan: artifactExists(artifacts, "render-plan.json"),
       has_remotion_render_manifest: artifactExists(artifacts, "render-manifest.remotion-direct.json"),
       has_preflight_report: artifactExists(artifacts, "preflight-report.json"),
