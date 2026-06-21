@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "test": "tsx src/renderPlan.test.ts && tsx src/n8nRenderIntake.test.ts && tsx src/server.test.ts"
+    "test": "tsx src/renderPlan.test.ts && tsx src/envConfig.test.ts && tsx src/n8nRenderIntake.test.ts && tsx src/server.test.ts"
   },
   "dependencies": {
     "@raiz/job-schema": "0.1.0",

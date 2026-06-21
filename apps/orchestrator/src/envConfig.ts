@@ -8,6 +8,8 @@ export interface EnvConfig {
   shortVideoMakerTimeoutMs: number;
   shortVideoMakerVendorPath: string;
   storageDir: string;
+  ttsProvider: string;
+  geminiApiKeyPresent: boolean;
 }
 
 export interface OrchestratorListenConfig {
@@ -68,7 +70,10 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
     shortVideoMakerRenderPath,
     shortVideoMakerTimeoutMs: Number(timeoutRaw),
     shortVideoMakerVendorPath: env.RAIZ_SHORT_VIDEO_MAKER_VENDOR_PATH ?? defaults.shortVideoMakerVendorPath,
-    storageDir: env.RAIZ_STORAGE_DIR ?? defaults.storageDir
+    storageDir: env.RAIZ_STORAGE_DIR ?? defaults.storageDir,
+    ttsProvider: (env.RAIZ_TTS_PROVIDER ?? "none").trim().toLowerCase() || "none",
+    // Presence only — the key value itself is never read into config, logged, or returned.
+    geminiApiKeyPresent: Boolean(env.GEMINI_API_KEY && env.GEMINI_API_KEY.trim())
   };
 }
 

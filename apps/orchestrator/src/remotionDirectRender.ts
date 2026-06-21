@@ -46,14 +46,18 @@ export interface RemotionRenderResult {
 
 export interface RemotionRenderQualitySummary {
   render_quality: "pass" | "warn" | "fail";
+  tts_provider?: string;
   visual_status?: string;
   audio_status?: string;
+  audio_path?: string | null;
+  audio_stream_present?: boolean;
   broll_status?: string;
   captions_count?: number;
   scenes_count?: number | null;
   audio_rms_db?: number | null;
   silent_audio_detected?: boolean;
   publish_ready?: boolean;
+  error_message?: string | null;
   reasons?: string[];
 }
 
@@ -274,20 +278,56 @@ export async function renderJobWithRemotionDirect(
       {
         ...outputManifest,
         render_quality: quality.render_quality,
+        tts_provider: quality.tts_provider ?? null,
         visual_status: quality.visual_status ?? null,
         audio_status: quality.audio_status ?? null,
+        audio_path: quality.audio_path ?? null,
+        audio_stream_present: quality.audio_stream_present ?? null,
         broll_status: quality.broll_status ?? null,
         captions_count: quality.captions_count ?? null,
         scenes_count: quality.scenes_count ?? null,
         audio_rms_db: quality.audio_rms_db ?? null,
         silent_audio_detected: quality.silent_audio_detected ?? false,
         publish_ready: quality.publish_ready ?? false,
+        error_message: quality.error_message ?? null,
         quality
       },
       null,
       2
     )}\n`
   );
+
+  // The manifest is written either way (truthful). A failed quality gate
+  // (tts_failed, silent audio, single static scene, empty visual) fails the job
+  // rather than letting it pass as "rendered".
+  if (quality.render_quality === "fail") {
+    const reason = `Render quality gate failed: ${(quality.reasons ?? []).join("; ") || "see render diagnostics"}`;
+    await updateJobStatus(jobId, "failed", {
+      storageRoot: options.storageRoot,
+      adapter: "remotion_direct",
+      error: reason,
+      metadata: {
+        ...startedMetadata,
+        render_failed_at: new Date().toISOString(),
+        render_manifest_path: manifestPath,
+        output_manifest_path: paths.outputManifestPath,
+        final_video_path: result.outputPath,
+        render_quality: "fail",
+        publish_ready: false
+      }
+    });
+    await appendJobEvent(
+      jobId,
+      {
+        type: "job.remotion_direct_render_quality_failed",
+        engine: "remotion_direct",
+        output_manifest_path: paths.outputManifestPath,
+        render_quality: "fail"
+      },
+      options
+    );
+    throw new JobRemotionDirectRenderError(jobId, reason);
+  }
 
   const finalStatus = await updateJobStatus(jobId, "rendered", {
     storageRoot: options.storageRoot,
@@ -298,7 +338,9 @@ export async function renderJobWithRemotionDirect(
       render_completed_at: completedAt,
       render_manifest_path: manifestPath,
       output_manifest_path: paths.outputManifestPath,
-      final_video_path: result.outputPath
+      final_video_path: result.outputPath,
+      render_quality: quality.render_quality,
+      publish_ready: quality.publish_ready ?? false
     }
   });
   await appendJobEvent(
@@ -327,28 +369,36 @@ async function readRenderDiagnostics(path: string): Promise<{
       audio?: RemotionRenderAudioSummary;
       visual?: RemotionRenderVisualSummary;
       render_quality?: "pass" | "warn" | "fail";
+      tts_provider?: string;
       visual_status?: string;
       audio_status?: string;
+      audio_path?: string | null;
+      audio_stream_present?: boolean;
       broll_status?: string;
       captions_count?: number;
       scenes_count?: number | null;
       audio_rms_db?: number | null;
       silent_audio_detected?: boolean;
       publish_ready?: boolean;
+      error_message?: string | null;
       quality_reasons?: string[];
     };
 
     const quality: RemotionRenderQualitySummary | undefined = parsed.render_quality
       ? {
           render_quality: parsed.render_quality,
+          tts_provider: parsed.tts_provider,
           visual_status: parsed.visual_status,
           audio_status: parsed.audio_status,
+          audio_path: parsed.audio_path ?? null,
+          audio_stream_present: parsed.audio_stream_present,
           broll_status: parsed.broll_status,
           captions_count: parsed.captions_count,
           scenes_count: parsed.scenes_count ?? null,
           audio_rms_db: parsed.audio_rms_db ?? null,
           silent_audio_detected: parsed.silent_audio_detected,
           publish_ready: parsed.publish_ready ?? false,
+          error_message: parsed.error_message ?? null,
           reasons: parsed.quality_reasons
         }
       : undefined;
@@ -389,14 +439,18 @@ function resolveQualitySummary(
   // renderer in tests). Stay conservative rather than claiming a verified pass.
   return {
     render_quality: "pass",
+    tts_provider: "none",
     visual_status: result.visual?.status ?? "unknown",
     audio_status: result.audio?.status ?? "unknown",
+    audio_path: null,
+    audio_stream_present: result.audio?.has_audio_track,
     broll_status: "unknown",
     captions_count: result.visual?.caption_cue_count,
     scenes_count: scenesCount,
     audio_rms_db: null,
     silent_audio_detected: false,
     publish_ready: false,
+    error_message: null,
     reasons: []
   };
 }

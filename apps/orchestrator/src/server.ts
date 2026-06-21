@@ -146,6 +146,10 @@ function getSafeConfigView(apiAuthEnabled: boolean) {
   return {
     ...config,
     apiAuthEnabled,
+    // Presence/flags only — the GEMINI_API_KEY value is never exposed.
+    gemini_api_key_present: config.geminiApiKeyPresent,
+    tts_provider: config.ttsProvider,
+    real_render_enabled: config.realRenderEnabled,
     safe_defaults: true,
     real_execution_blocked_by_default: true
   };
@@ -214,10 +218,13 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
   });
 
   server.get("/health", async () => {
+    const config = loadEnvConfig();
     return {
       status: "ok",
       service: "raiz-orchestrator",
       real_render_enabled: getExecutionGuard().real_render_enabled,
+      tts_provider: config.ttsProvider,
+      gemini_api_key_present: config.geminiApiKeyPresent,
       time: new Date().toISOString()
     };
   });

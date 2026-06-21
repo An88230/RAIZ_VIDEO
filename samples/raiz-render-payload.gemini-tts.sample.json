@@ -1,0 +1,37 @@
+{
+  "video_id": "RAIZ-SAMPLE-GEMINI-001",
+  "template": "new_era_dark_editorial",
+  "format": "9:16",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "duration": 20,
+  "language": "ar",
+  "rtl": true,
+  "topic": "الانطفاء اللامع",
+  "angle": "إنت مش تعبان… إنت شغال وجزء منك مطفّي",
+  "tts_provider": "gemini",
+  "voiceover_text": "في لحظة ما، لا ينطفئ الإنسان فجأة. هو فقط يفقد اللمعة التي كانت تشرح حضوره. النجاح الظاهري قد يخفي إرهاقًا صامتًا. سمِّ ما تشعر به، قبل أن يبتلعك.",
+  "captions": [
+    "لا ينطفئ الإنسان فجأة",
+    "يفقد اللمعة التي تشرح حضوره",
+    "النجاح الظاهري قد يخفي إرهاقًا صامتًا",
+    "سمِّ ما تشعر به قبل أن يبتلعك"
+  ],
+  "scenes": [
+    {
+      "scene_id": "S01",
+      "caption": "لا ينطفئ الإنسان فجأة",
+      "broll_search_terms": ["dark desk phone light", "night office close up"]
+    },
+    {
+      "scene_id": "S02",
+      "caption": "سمِّ ما تشعر به قبل أن يبتلعك",
+      "broll_search_terms": ["writing notebook at night"]
+    }
+  ],
+  "brand": {
+    "footer": "© 2025 Nabil88 | nabil88.art"
+  },
+  "_note": "Requires RAIZ_TTS_PROVIDER=gemini and GEMINI_API_KEY in .env (never commit the key). The render generates voiceover_text via Gemini TTS into storage/jobs/<id>/audio/voiceover.wav and muxes it. If the key is missing the render STOPS (no robotic/silent fallback); if the Gemini API call fails the output-manifest records audio_status=tts_failed, tts_provider=gemini, publish_ready=false."
+}

@@ -26,8 +26,17 @@ import { basename, dirname, extname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { fetchPexelsBroll } from "./fetch-pexels-broll.mjs";
+import { generateGeminiTts } from "./gemini-tts.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Load .env (Node 20.12+) so GEMINI_API_KEY / RAIZ_TTS_PROVIDER are available when
+// this driver runs standalone. The key lives only in the gitignored .env file.
+try {
+  process.loadEnvFile(resolve(repoRoot, ".env"));
+} catch {
+  // No .env file; rely on the ambient environment.
+}
 const remotionDir = resolve(repoRoot, "apps/render-remotion");
 const FPS = 30;
 // Remotion composition ids allow only a-z A-Z 0-9 and "-". RAIZ template ids use
@@ -763,29 +772,77 @@ async function main() {
     return;
   }
 
+  const ttsProvider = (process.env.RAIZ_TTS_PROVIDER || "").trim().toLowerCase();
   let voiceInputPath = null;
+  let audioOrigin = "none";
+  let ttsError = null;
+  let audioPath = null;
   const audioSummary = {
     source: voicePlan.source,
     status: "silent_render",
     external_url: voicePlan.externalUrlMasked ?? null,
-    file_path: voicePlan.source === "external_file" ? voicePlan.externalPath : null,
+    file_path: null,
     external_audio_attached: false,
+    tts_provider: ttsProvider || "none",
     warnings: [...voicePlan.warnings]
   };
 
-  // 1. Voice-over: external file or external URL if provided and usable.
-  if (voicePlan.source === "external_file" && voicePlan.externalPath) {
+  // 1. Voice-over.
+  if (ttsProvider === "gemini") {
+    // Gemini is authoritative when selected. No robotic/mock/silent fallback.
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || !apiKey.trim()) {
+      throw new Error(
+        "RAIZ_TTS_PROVIDER=gemini but GEMINI_API_KEY is not set. Set it in .env. Refusing to render fallback/robotic audio."
+      );
+    }
+
+    const ttsText = (job.voiceover_text || job.voiceover || job.script_final_arabic || script || "").toString();
+    const audioDir = basename(outDir) === "output" ? resolve(outDir, "..", "audio") : resolve(outDir, "audio");
+    mkdirSync(audioDir, { recursive: true });
+    const voiceoverWav = resolve(audioDir, "voiceover.wav");
+    console.log(`\n[voice] generating Gemini TTS voice-over -> ${voiceoverWav}`);
+
+    const tts = await generateGeminiTts({
+      apiKey,
+      text: ttsText,
+      outPath: voiceoverWav,
+      voiceName: process.env.RAIZ_TTS_VOICE
+    });
+
+    if (tts.ok) {
+      voiceInputPath = voiceoverWav;
+      audioPath = voiceoverWav;
+      audioOrigin = "gemini";
+      audioSummary.source = "gemini_tts";
+      audioSummary.status = "generated_by_gemini";
+      audioSummary.external_audio_attached = true;
+      audioSummary.file_path = voiceoverWav;
+    } else {
+      audioOrigin = "tts_failed";
+      ttsError = tts.error || "Gemini TTS failed.";
+      audioSummary.source = "gemini_tts";
+      audioSummary.status = "tts_failed";
+      audioSummary.warnings.push(ttsError);
+      console.warn(`[voice][tts][error] ${ttsError}`);
+    }
+  } else if (voicePlan.source === "external_file" && voicePlan.externalPath) {
     console.log(`\n[voice] using external VO: ${voicePlan.externalPath}`);
     copyFileSync(voicePlan.externalPath, voiceAiff);
     voiceInputPath = voiceAiff;
+    audioPath = voiceAiff;
+    audioOrigin = "external_file";
     audioSummary.status = "attached";
     audioSummary.external_audio_attached = true;
+    audioSummary.file_path = voicePlan.externalPath;
   } else if (voicePlan.source === "external_url" && voicePlan.externalUrl) {
     console.log(`\n[voice] fetching external audio URL: ${voicePlan.externalUrlMasked}`);
     const download = await downloadExternalAudio(voicePlan.externalUrl, voiceAiff);
 
     if (download.ok) {
       voiceInputPath = voiceAiff;
+      audioPath = voiceAiff;
+      audioOrigin = "external_url";
       audioSummary.status = "attached";
       audioSummary.external_audio_attached = true;
     } else {
@@ -986,7 +1043,11 @@ async function main() {
   const silentAudioDetected = hasAudioTrack && audioRmsDb !== null && audioRmsDb <= SILENCE_DB_THRESHOLD;
 
   let audioStatus;
-  if (audioSummary.external_audio_attached) {
+  if (audioOrigin === "gemini") {
+    audioStatus = silentAudioDetected ? "silent_audio" : "generated_by_gemini";
+  } else if (audioOrigin === "tts_failed") {
+    audioStatus = "tts_failed";
+  } else if (audioSummary.external_audio_attached) {
     audioStatus = silentAudioDetected ? "silent_audio" : "external_audio";
   } else {
     audioStatus = "no_audio_url";
@@ -1010,6 +1071,10 @@ async function main() {
     renderQuality = "fail";
     qualityReasons.push("audio track is present but silent");
   }
+  if (audioStatus === "tts_failed") {
+    renderQuality = "fail";
+    qualityReasons.push(ttsError || "Gemini TTS failed");
+  }
   if (renderQuality !== "fail" && audioExpected && audioStatus === "no_audio_url") {
     renderQuality = renderQuality === "pass" ? "warn" : renderQuality;
     qualityReasons.push("narration expected but no external audio URL was supplied");
@@ -1021,20 +1086,26 @@ async function main() {
 
   // Publish-ready only when the render is clean AND has real audio AND real b-roll.
   const publishReady =
-    renderQuality === "pass" && audioStatus === "external_audio" && brollStatus === "external_clip";
+    renderQuality === "pass" &&
+    (audioStatus === "generated_by_gemini" || audioStatus === "external_audio") &&
+    brollStatus === "external_clip";
 
   const diagnostics = {
     job_id: jobId,
     render_quality: renderQuality,
     quality_reasons: qualityReasons,
+    tts_provider: ttsProvider || "none",
     visual_status: visualStatus,
     audio_status: audioStatus,
+    audio_path: audioPath,
+    audio_stream_present: hasAudioTrack,
     broll_status: brollStatus,
     captions_count: allCues.length,
     scenes_count: sceneCount,
     audio_rms_db: audioRmsDb,
     silent_audio_detected: silentAudioDetected,
     publish_ready: publishReady,
+    error_message: ttsError ? ttsError.slice(0, 300) : null,
     visual: {
       status: visualStatus,
       layer_count: visualPlan.layerCount,
@@ -1070,6 +1141,7 @@ async function main() {
   console.log(`   file:       ${finalVideo}`);
   console.log(`   dimensions: ${dimensions} (expected 1080x1920)`);
   console.log(`   audio:      ${audioStatus}${audioRmsDb !== null ? ` (${audioRmsDb} dB)` : ""}`);
+  console.log(`   tts:        ${ttsProvider || "none"}${audioPath ? ` -> ${audioPath}` : ""}`);
   console.log(`   visual:     ${visualStatus} (${sceneCount} scenes, ${allCues.length} caption cues)`);
   console.log(`   b-roll:     ${brollStatus}`);
   console.log(`   publish_ready: ${publishReady}`);
@@ -1082,9 +1154,9 @@ async function main() {
   if (dimensions !== "1080x1920") {
     throw new Error(`Expected 1080x1920 output, got ${dimensions}.`);
   }
-  if (renderQuality === "fail") {
-    throw new Error(`Render quality gate failed: ${qualityReasons.join("; ")}.`);
-  }
+  // render_quality === "fail" is recorded in diagnostics/output-manifest (and the
+  // orchestrator fails the job). We do not throw here so a tts_failed/quality-fail
+  // render still produces a truthful manifest instead of an opaque crash.
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
