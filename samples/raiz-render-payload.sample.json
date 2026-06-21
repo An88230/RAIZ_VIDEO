@@ -1,0 +1,23 @@
+{
+  "video_id": "TEST-001",
+  "template": "new_era_dark_editorial",
+  "format": "9:16",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "duration": 45,
+  "language": "ar",
+  "rtl": true,
+  "topic": "اختبار",
+  "angle": "اختبار الرندر المحلي",
+  "voiceover": "هذا اختبار صوتي قصير",
+  "captions": [
+    "هذا اختبار",
+    "رندر محلي",
+    "RAIZ"
+  ],
+  "scenes": [],
+  "brand": {
+    "footer": "© 2025 Nabil88 | nabil88.art"
+  }
+}
