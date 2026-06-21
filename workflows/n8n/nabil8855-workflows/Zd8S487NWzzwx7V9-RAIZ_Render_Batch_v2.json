@@ -82,7 +82,7 @@
         96
       ],
       "parameters": {
-        "jsCode": "return $input.all().map(item => ({ json: {\n  video_id: item.json.video_id,\n  main_status: item.json.main_status,\n  next_stage: 'RENDERING',\n  render_endpoint_required: true,\n  message: 'Render API is not configured yet. Connect RAIZ /render endpoint before enabling render execution.',\n  expected_payload_source: 'CONTENT_ASSETS asset_type=RENDER_PAYLOAD'\n}}));"
+        "jsCode": "return $input.all().map(item => ({ json: {\n  video_id: item.json.video_id,\n  main_status: item.json.main_status,\n  next_stage: 'RENDERING',\n  render_endpoint_required: true,\n  message: 'RAIZ render endpoint is prepared at /integrations/n8n/render/remotion-direct. Enable only for a manual local run after RAIZ is started with real render explicitly allowed.',\n  expected_payload_source: 'CONTENT_ASSETS asset_type=RENDER_PAYLOAD',\n  render_endpoint: '/integrations/n8n/render/remotion-direct'\n}}));"
       }
     },
     {

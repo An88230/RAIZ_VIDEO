@@ -29,3 +29,16 @@ but importable workflow JSON belongs here.
 - `RAIZ_Daily_Publisher_v2`
 - `RAIZ_Analytics_Feedback_Loop_v2`
 - `RAIZ_Weekly_Idea_Autopilot`
+
+## RAIZ Render Endpoint Contract
+
+The Shorts Factory export prepares a `renderPayload` and its disabled `Send
+Render Job` node points to:
+
+```text
+${RAIZ_RENDER_API_URL:-http://127.0.0.1:4000}/integrations/n8n/render/remotion-direct
+```
+
+The render, download, and YouTube nodes remain disabled in source control.
+Enable them only inside the target n8n runtime for a manual local test after
+RAIZ is running with `RAIZ_ENABLE_REAL_RENDER=true`.
