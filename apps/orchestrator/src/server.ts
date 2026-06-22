@@ -1,7 +1,9 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { validateRaizJob } from "@raiz/job-schema";
 import { remotionDirectAdapter, shortVideoMakerAdapter } from "@raiz/render-adapters";
-import { resolve } from "node:path";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import { basename, isAbsolute, relative, resolve } from "node:path";
 
 import { loadApiAuthConfig, loadEnvConfig } from "./envConfig.js";
 import { getExecutionGuard } from "./executionGuard.js";
@@ -16,6 +18,7 @@ import {
 import {
   createShortVideoMakerPayload,
   createJobRecord,
+  getJobPaths,
   getJobStatus,
   JobAdapterPayloadPreflightError,
   JobAdapterPayloadStateError,
@@ -180,6 +183,37 @@ interface ManualReviewBody {
   reviewerNote?: unknown;
 }
 
+function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function getRequestOrigin(request: FastifyRequest): string | null {
+  const proto = firstHeaderValue(request.headers["x-forwarded-proto"]) ?? request.protocol ?? "http";
+  const host = firstHeaderValue(request.headers["x-forwarded-host"]) ?? firstHeaderValue(request.headers.host);
+
+  return host ? `${proto}://${host}` : null;
+}
+
+function getJobOutputDownloadFields(request: FastifyRequest, jobId: string) {
+  const videoDownloadPath = `/jobs/${encodeURIComponent(jobId)}/output/download`;
+  const origin = getRequestOrigin(request);
+
+  return {
+    video_download_path: videoDownloadPath,
+    video_download_url: origin ? `${origin}${videoDownloadPath}` : videoDownloadPath
+  };
+}
+
+function isPathInside(parent: string, candidate: string): boolean {
+  const relativePath = relative(parent, candidate);
+
+  return relativePath === "" || (relativePath !== "" && !relativePath.startsWith("..") && !isAbsolute(relativePath));
+}
+
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
 export function createServer(options: CreateServerOptions = {}): FastifyInstance {
   const server = Fastify({ logger: options.logger ?? false });
   const apiAuth = getServerApiAuthConfig(options);
@@ -332,6 +366,74 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
     }
   });
 
+  server.get<{ Params: { id: string } }>("/jobs/:id/output/download", async (request, reply) => {
+    try {
+      const status = await getJobStatus(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+
+      if (status.status !== "rendered" || !status.output_path) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: "Job does not have a rendered local output to download."
+        });
+      }
+
+      const paths = getJobPaths(request.params.id, {
+        storageRoot: options.storageRoot
+      });
+      const outputPath = resolve(status.output_path);
+      const outputDir = resolve(paths.outputDir);
+
+      if (!isPathInside(outputDir, outputPath)) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: "Rendered output path is outside the job output directory."
+        });
+      }
+
+      let outputStats;
+      try {
+        outputStats = await stat(outputPath);
+      } catch (error) {
+        if (isErrnoException(error) && error.code === "ENOENT") {
+          return reply.code(404).send({
+            status: "not_found",
+            job_id: request.params.id,
+            error: "Rendered output file was not found."
+          });
+        }
+
+        throw error;
+      }
+
+      if (!outputStats.isFile()) {
+        return reply.code(409).send({
+          status: "conflict",
+          job_id: request.params.id,
+          error: "Rendered output path is not a file."
+        });
+      }
+
+      return reply
+        .type("video/mp4")
+        .header("content-length", String(outputStats.size))
+        .header("content-disposition", `attachment; filename="${basename(outputPath)}"`)
+        .send(createReadStream(outputPath));
+    } catch (error) {
+      if (error instanceof JobNotFoundError) {
+        return reply.code(404).send({
+          status: "not_found",
+          job_id: request.params.id
+        });
+      }
+
+      throw error;
+    }
+  });
+
   server.post<{ Params: { id: string } }>("/jobs/:id/prepare", async (request, reply) => {
     try {
       return await prepareJob(request.params.id, {
@@ -463,11 +565,16 @@ export function createServer(options: CreateServerOptions = {}): FastifyInstance
 
   server.post<{ Body: unknown }>("/integrations/n8n/render/remotion-direct", async (request, reply) => {
     try {
-      return await renderN8nPayloadWithRemotionDirect(
+      const result = await renderN8nPayloadWithRemotionDirect(
         request.body,
         options.remotionRenderer ?? defaultRemotionRenderer,
         { storageRoot: options.storageRoot }
       );
+
+      return {
+        ...result,
+        ...getJobOutputDownloadFields(request, result.job_id)
+      };
     } catch (error) {
       if (error instanceof RealRenderExecutionDisabledError) {
         return reply.code(403).send({

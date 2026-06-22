@@ -4106,6 +4106,8 @@ const n8nRenderBody = JSON.parse(n8nRenderResponse.body) as {
   status?: string;
   output_path?: string | null;
   n8n_render_payload_path?: string;
+  video_download_path?: string;
+  video_download_url?: string;
   metadata?: {
     preflight_status?: string;
     render_manifest_path?: string;
@@ -4120,10 +4122,26 @@ if (
   n8nRenderBody.status !== "rendered" ||
   n8nRenderBody.output_path !== n8nOutputPath ||
   n8nRenderBody.n8n_render_payload_path !== resolve(n8nJobDir, "n8n-render-payload.json") ||
+  n8nRenderBody.video_download_path !== `/jobs/${n8nJobId}/output/download` ||
+  !n8nRenderBody.video_download_url?.endsWith(`/jobs/${n8nJobId}/output/download`) ||
   n8nRenderBody.metadata?.preflight_status !== "passed" ||
   !existsSync(n8nOutputPath)
 ) {
   throw new Error("Expected n8n Remotion intake to create a rendered job with MP4 output.");
+}
+
+const n8nOutputDownloadResponse = await server.inject({
+  method: "GET",
+  url: n8nRenderBody.video_download_path
+});
+
+if (
+  n8nOutputDownloadResponse.statusCode !== 200 ||
+  !String(n8nOutputDownloadResponse.headers["content-type"] ?? "").includes("video/mp4") ||
+  Number(n8nOutputDownloadResponse.headers["content-length"] ?? 0) <= 0 ||
+  !String(n8nOutputDownloadResponse.headers["content-disposition"] ?? "").includes(`${n8nJobId}.mp4`)
+) {
+  throw new Error("Expected n8n Remotion intake output to be downloadable as video/mp4.");
 }
 
 for (const requiredArtifact of [
