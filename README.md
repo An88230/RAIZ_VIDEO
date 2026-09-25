@@ -37,6 +37,23 @@ Current local-first scope:
 - Warn when schema-supported local render fields are reserved or not implemented
   in local render v1.
 
+## License and contributions
+
+The original RAIZ source code, schemas, workflows, and documentation are
+available under the [MIT License](LICENSE). Contributions are welcome; see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the local checks and pull request process.
+
+Bundled IBM Plex Sans Arabic font files in `apps/render-remotion/public/fonts/`
+remain under the [SIL Open Font License 1.1](apps/render-remotion/public/fonts/LICENSE.txt),
+including IBM's copyright notice and reserved font name.
+
+The audio files in `apps/render-remotion/public/ambient/` and
+`samples/assets/` are **not** covered by the MIT grant. Their origin and
+redistribution rights need to be documented before they can be offered for
+reuse. Do not treat public access to these media files as a license.
+External footage, voice, music, and logos supplied by users remain subject
+to their own rights.
+
 ## Current Status
 
 The current project state, source-of-truth boundary, and recommended next phases
@@ -374,3 +391,5 @@ cancelled
 ```
 
 Valid transitions are enforced before status files are updated. For example, `queued -> preparing` is accepted, but `queued -> rendered` is rejected with `409 conflict`.
+
+© 2026 nabilstudios | info@nabilstudios.com
